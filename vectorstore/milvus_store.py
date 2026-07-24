@@ -109,8 +109,11 @@ def build_milvus_vectorstore(
         collection_name=MILVUS_COLLECTION_NAME,
         connection_args=get_milvus_connection_args(),
         drop_old=drop_old,
-    )
 
+        # 允许不同切片保存不同的 metadata 字段，
+        # 避免 Schema 只依赖第一条 Document。
+        enable_dynamic_field=True,
+    )
     print("Milvus 向量库构建完成")
 
     return vectorstore
@@ -139,8 +142,11 @@ def load_milvus_vectorstore(
         embedding_function=embeddings,
         collection_name=MILVUS_COLLECTION_NAME,
         connection_args=get_milvus_connection_args(),
-    )
 
+        # 必须与创建 Collection 时保持一致，
+        # 才能在检索结果中正常读取动态 metadata。
+        enable_dynamic_field=True,
+    )
     print("Milvus 向量库加载完成")
 
     return vectorstore

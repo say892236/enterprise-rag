@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import List
+from time import perf_counter
 
 from config.settings import HYBRID_TOP_K, RERANK_TOP_K
 
@@ -53,6 +54,9 @@ def print_result(index: int, total: int, result: dict):
     print("\n答案:")
     print(result["answer"])
 
+    if result.get("latency_ms") is not None:
+        print(f"\n端到端耗时: {result['latency_ms']:.2f} ms")
+
     print("\nTop Sources:")
 
     for i, source in enumerate(result["sources"], start=1):
@@ -73,7 +77,7 @@ def print_result(index: int, total: int, result: dict):
 def run_eval(
     pipeline_name: str,
     rag_chain,
-    questions: List[str],
+    questions: List[str | dict],
     output_file: str,
     retrieve_top_k: int = HYBRID_TOP_K,
     rerank_top_k: int = RERANK_TOP_K,
@@ -103,41 +107,99 @@ def run_eval(
 
     output_path = Path(output_file)
 
-    # 每次评估前删除旧文件，避免重复追加
+    # 防止问题集为空时误打印“评估完成”。
+    if not questions:
+        raise ValueError(
+            "评估问题集为空，请检查 eval/questions.py 中的 "
+            "EVAL_CASES 和 TEST_QUESTIONS。"
+        )
+
+    # 每次评估前删除旧结果，避免重复追加。
     if output_path.exists():
         output_path.unlink()
 
-    for index, question in enumerate(questions, start=1):
-        # 执行一次 RAG 问答
+    # 注意：for 循环必须和上面的 if 保持同一级缩进。
+    for index, question_item in enumerate(
+        questions,
+        start=1,
+    ):
+        # 兼容两种问题格式：
+        # 1. 字符串
+        # 2. 包含 question 字段的字典
+        if isinstance(question_item, dict):
+            question = question_item.get("question")
+        else:
+            question = question_item
+
+        # Retriever 和 Embedding 只能接收字符串。
+        if not isinstance(question, str):
+            raise TypeError(
+                "评估问题必须是字符串，"
+                f"当前类型：{type(question).__name__}，"
+                f"当前内容：{question!r}"
+            )
+
+        question = question.strip()
+
+        if not question:
+            raise ValueError(
+                f"第 {index} 条评估问题为空"
+            )
+
+        # 记录完整 RAG 链路的端到端耗时。
+        start_time = perf_counter()
+
         result = rag_chain.invoke(
             question=question,
             retrieve_top_k=retrieve_top_k,
             rerank_top_k=rerank_top_k,
         )
 
-        # 控制台打印
+        latency_ms = (
+            perf_counter() - start_time
+        ) * 1000
+
+        # 写入 result，方便控制台打印。
+        result["latency_ms"] = latency_ms
+
+        # 控制台打印当前这一条结果。
         print_result(
             index=index,
             total=len(questions),
             result=result,
         )
 
-        sources = result["sources"]
+        sources = result.get("sources") or []
 
-        # 保存结构化结果，方便后续 compare 脚本读取
+        # 保存当前这一条结构化评估结果。
         record = {
             "timestamp": datetime.now().isoformat(),
             "pipeline": pipeline_name,
             "question": result["question"],
-            "rewritten_question": result.get("rewritten_question"),
+            "rewritten_question": result.get(
+                "rewritten_question"
+            ),
             "answer": result["answer"],
             "sources": sources,
-            "top_source": sources[0] if sources else None,
+            "top_source": (
+                sources[0]
+                if sources
+                else None
+            ),
             "retrieve_top_k": retrieve_top_k,
             "rerank_top_k": rerank_top_k,
+
+            # 完整 RAG 请求耗时，不是纯检索耗时。
+            "latency_ms": round(
+                latency_ms,
+                2,
+            ),
         }
 
-        save_jsonl(output_path, record)
+        save_jsonl(
+            output_file=output_path,
+            data=record,
+        )
 
     print("\n评估完成")
     print("pipeline:", pipeline_name)

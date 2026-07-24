@@ -92,6 +92,8 @@ class EvalResult:
     hit_at_1: Optional[float]
     hit_at_3: Optional[float]
     hit_at_5: Optional[float]
+    # 前 5 个检索结果召回了多少期望文档
+    recall_at_5: Optional[float]
     precision_at_5: Optional[float]
     mrr: Optional[float]
 
@@ -353,6 +355,38 @@ def compute_hit_at_k(
 
     return 0.0
 
+def compute_recall_at_k(
+    sources: List[str],
+    expected_sources: List[str],
+    k: int,
+) -> float:
+    """
+    计算 Recall@K。
+
+    公式：
+        Recall@K =
+        TopK 中召回的期望文档数量
+        ÷
+        所有期望文档数量
+
+    说明：
+    - 使用集合去重，避免同一个 source 的多个 chunk 被重复计算。
+    - 如果每个问题只有一个 expected_source，
+      Recall@K 会和 Hit@K 相同。
+    """
+
+    if not expected_sources:
+        return 0.0
+
+    unique_expected_sources = set(expected_sources)
+    recalled_sources = set()
+
+    for source in sources[:k]:
+        for expected_source in unique_expected_sources:
+            if expected_source in source:
+                recalled_sources.add(expected_source)
+
+    return len(recalled_sources) / len(unique_expected_sources)
 
 def compute_precision_at_k(
     sources: List[str],
@@ -552,13 +586,40 @@ def evaluate_qa_case(
     sources = extract_source_names(chat_data)
     source_text = extract_source_text(chat_data)
 
+    hit_at_1 = compute_hit_at_k(
+        sources,
+        case.expected_sources,
+        1,
+    )
 
-    hit_at_1 = compute_hit_at_k(sources, case.expected_sources, 1)
-    hit_at_3 = compute_hit_at_k(sources, case.expected_sources, 3)
-    hit_at_5 = compute_hit_at_k(sources, case.expected_sources, 5)
-    precision_at_5 = compute_precision_at_k(sources, case.expected_sources, 5)
-    mrr = compute_mrr(sources, case.expected_sources)
+    hit_at_3 = compute_hit_at_k(
+        sources,
+        case.expected_sources,
+        3,
+    )
 
+    hit_at_5 = compute_hit_at_k(
+        sources,
+        case.expected_sources,
+        5,
+    )
+
+    recall_at_5 = compute_recall_at_k(
+        sources,
+        case.expected_sources,
+        5,
+    )
+
+    precision_at_5 = compute_precision_at_k(
+        sources,
+        case.expected_sources,
+        5,
+    )
+
+    mrr = compute_mrr(
+        sources,
+        case.expected_sources,
+    )
     fact_coverage = compute_fact_coverage(answer, case.expected_keywords)
     faithfulness = compute_simple_faithfulness(
         answer=answer,
@@ -595,6 +656,7 @@ def evaluate_qa_case(
         hit_at_1=hit_at_1,
         hit_at_3=hit_at_3,
         hit_at_5=hit_at_5,
+        recall_at_5=recall_at_5,
         precision_at_5=precision_at_5,
         mrr=mrr,
 
@@ -646,6 +708,7 @@ def evaluate_no_answer_case(
         hit_at_1=None,
         hit_at_3=None,
         hit_at_5=None,
+        recall_at_5=None,
         precision_at_5=None,
         mrr=None,
 
@@ -691,6 +754,7 @@ def evaluate_permission_case(
         hit_at_1=None,
         hit_at_3=None,
         hit_at_5=None,
+        recall_at_5=None,
         precision_at_5=None,
         mrr=None,
 
@@ -785,12 +849,43 @@ def summarize_results(results: List[EvalResult]) -> Dict[str, Any]:
         "pass_rate": sum(1 for item in results if item.passed) / len(results) if results else 0,
 
         "qa_cases": len(qa_results),
-        "hit_at_1": average([item.hit_at_1 for item in qa_results if item.hit_at_1 is not None]),
-        "hit_at_3": average([item.hit_at_3 for item in qa_results if item.hit_at_3 is not None]),
-        "hit_at_5": average([item.hit_at_5 for item in qa_results if item.hit_at_5 is not None]),
-        "precision_at_5": average([item.precision_at_5 for item in qa_results if item.precision_at_5 is not None]),
-        "mrr": average([item.mrr for item in qa_results if item.mrr is not None]),
-        "fact_coverage": average([item.fact_coverage for item in qa_results if item.fact_coverage is not None]),
+        "hit_at_1": average([
+            item.hit_at_1
+            for item in qa_results
+            if item.hit_at_1 is not None
+        ]),
+
+        "hit_at_3": average([
+            item.hit_at_3
+            for item in qa_results
+            if item.hit_at_3 is not None
+        ]),
+
+        "hit_at_5": average([
+            item.hit_at_5
+            for item in qa_results
+            if item.hit_at_5 is not None
+        ]),
+
+        "recall_at_5": average([
+            item.recall_at_5
+            for item in qa_results
+            if item.recall_at_5 is not None
+        ]),
+
+        "precision_at_5": average([
+            item.precision_at_5
+            for item in qa_results
+            if item.precision_at_5 is not None
+        ]),
+
+        "mrr": average([
+            item.mrr
+            for item in qa_results
+            if item.mrr is not None
+        ]),
+        "fact_coverage": average([
+            item.fact_coverage for item in qa_results if item.fact_coverage is not None]),
 
         # 如果 API 没有返回 chunk 内容，这个可能是 None
         "faithfulness": average(faithfulness_values),
@@ -903,6 +998,7 @@ def write_markdown_report(
     lines.append(f"| Hit@1 | {format_percent(summary['hit_at_1'])} |")
     lines.append(f"| Hit@3 | {format_percent(summary['hit_at_3'])} |")
     lines.append(f"| Hit@5 | {format_percent(summary['hit_at_5'])} |")
+    lines.append(f"| Recall@5 | {format_percent(summary['recall_at_5'])} |")
     lines.append(f"| Precision@5 | {format_percent(summary['precision_at_5'])} |")
     lines.append(f"| MRR | {format_number(summary['mrr'])} |")
     lines.append("")
@@ -982,6 +1078,7 @@ def print_summary(summary: Dict[str, Any]) -> None:
     print(f"Hit@1: {format_percent(summary['hit_at_1'])}")
     print(f"Hit@3: {format_percent(summary['hit_at_3'])}")
     print(f"Hit@5: {format_percent(summary['hit_at_5'])}")
+    print(f"Recall@5: {format_percent(summary['recall_at_5'])}")
     print(f"Precision@5: {format_percent(summary['precision_at_5'])}")
     print(f"MRR: {format_number(summary['mrr'])}")
     print(f"关键事实覆盖率: {format_percent(summary['fact_coverage'])}")
