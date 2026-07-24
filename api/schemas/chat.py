@@ -128,31 +128,48 @@ class ChatRequest(BaseModel):
 
 
 class SourceItem(BaseModel):
-    """
-    单条引用来源。
-    """
+        """
+        RAG 引用来源信息。
 
-    source: Optional[str] = Field(default=None, description="来源文件")
-    header_1: Optional[str] = Field(default=None, description="一级标题")
-    header_2: Optional[str] = Field(default=None, description="二级标题")
-    chunk_id: Optional[str] = Field(default=None, description="chunk ID")
+        page_content / content 用于：
+        1. 前端展示引用片段
+        2. 评估 Faithfulness 忠实度
+        3. 调试检索结果是否真正支持答案
+        """
 
-    content_preview: Optional[str] = Field(
-        default=None,
-        description="引用片段预览",
-    )
+        # 基础溯源信息
+        source: Optional[str] = None
+        file_path: Optional[str] = None
+        file_type: Optional[str] = None
+        header_1: Optional[str] = None
+        header_2: Optional[str] = None
+        chunk_id: Optional[str] = None
+        chunk_index: Optional[int] = None
 
-    retrieval_sources: Optional[List[str]] = Field(
-        default=None,
-        description="检索来源，例如 dense / bm25",
-    )
+        # 文档正文
+        page_content: Optional[str] = None
+        content: Optional[str] = None
+        content_preview: Optional[str] = None
 
-    chroma_score: Optional[float] = Field(default=None, description="Chroma 原始分数")
-    milvus_score: Optional[float] = Field(default=None,description="Milvus Dense 检索分数",)
-    bm25_score: Optional[float] = Field(default=None, description="BM25 原始分数")
-    hybrid_score: Optional[float] = Field(default=None, description="Hybrid 融合分数")
-    rerank_score: Optional[float] = Field(default=None, description="Reranker 最终分数")
+        # Dense 检索分数
+        score: Optional[float] = None
+        chroma_score: Optional[float] = None
+        milvus_score: Optional[float] = None
+        dense_rank: Optional[int] = None
+        dense_rrf_score: Optional[float] = None
 
+        # BM25 检索分数
+        bm25_score: Optional[float] = None
+        bm25_rank: Optional[int] = None
+        bm25_rrf_score: Optional[float] = None
+
+        # Hybrid / Reranker
+        hybrid_score: Optional[float] = None
+        retrieval_sources: Optional[List[str]] = None
+        raw_rerank_score: Optional[float] = None
+        rerank_boost: Optional[float] = None
+        rerank_boost_reasons: Optional[List[str]] = None
+        rerank_score: Optional[float] = None
 
 
 class ChatResponse(BaseModel):

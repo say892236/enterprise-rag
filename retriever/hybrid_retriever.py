@@ -26,6 +26,7 @@ from langchain_core.documents import Document
 
 from retriever.chroma_retriever import ChromaRetriever
 from retriever.bm25_retriever import BM25Retriever
+from retriever.milvus_retriever import MilvusRetriever
 
 
 class HybridRetriever:
@@ -40,7 +41,7 @@ class HybridRetriever:
 
     def __init__(
         self,
-        dense_retriever: ChromaRetriever,
+        dense_retriever: MilvusRetriever(),
         bm25_retriever: BM25Retriever,
         dense_top_k: int = 10,
         bm25_top_k: int = 10,
@@ -292,6 +293,19 @@ class HybridRetriever:
             key=lambda doc: doc.metadata.get("hybrid_score", 0.0),
             reverse=True,
         )
+
+
+        for doc in fused_docs[:5]:
+            print(
+                "source:",
+                doc.metadata.get("source"),
+                "| header:",
+                doc.metadata.get("header_2"),
+                "| score:",
+                doc.metadata.get("hybrid_score")
+            )
+
+        print("=" * 50)
 
         # 8. 返回最终 top_k
         return fused_docs[:final_k]

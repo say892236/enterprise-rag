@@ -150,7 +150,14 @@ score: {score}
                 "header_2": metadata.get("header_2"),
                 "chunk_id": metadata.get("chunk_id"),
                 "chunk_index": metadata.get("chunk_index"),
+
+                # ===== 文档正文 =====
+                # page_content：保留 LangChain Document 的原始命名
+                # content：给 API / 前端 / 评估脚本使用的统一字段
+                # content_preview：前端展示用摘要
                 "page_content": doc.page_content,
+                "content": doc.page_content,
+                "content_preview": doc.page_content[:200],
 
                 # Dense 检索分数
                 "score": metadata.get("score"),
@@ -255,6 +262,26 @@ score: {score}
                     "confidence": confidence_result.to_dict(),
                 }
 
+            # 临时调试：检查最终送给 LLM 的文档
+            print("=" * 80)
+            print("[DEBUG Final Docs Before LLM]")
+            print("confidence passed:", confidence_result.passed)
+            print("confidence reason:", confidence_result.reason)
+            print("final docs count:", len(final_docs))
+
+            for index, doc in enumerate(final_docs, start=1):
+                print(
+                    f"doc {index}:",
+                    "source=", doc.metadata.get("source"),
+                    "header_2=", doc.metadata.get("header_2"),
+                )
+                print(
+                    "content:",
+                    doc.page_content[:300].replace("\n", " "),
+                )
+
+            print("=" * 80)
+
         # 6. 构造上下文。
         # 这里不依赖 self.format_context()，直接在 invoke 内部拼接上下文，
         # 避免当前类中没有 format_context 方法导致 AttributeError。
@@ -289,30 +316,42 @@ score: {score}
                 (
                     "system",
                     """
-    你是企业知识库问答助手。
+        你是企业知识库问答助手。
 
-    请严格遵守以下规则：
+        请严格遵守以下规则：
 
-    1. 你只能根据【知识库上下文】回答问题。
-    2. 不得使用常识、经验、猜测或外部知识补充答案。
-    3. 如果知识库上下文中没有相关信息，必须只回答：知识库中未找到相关信息。
-    4. 如果上下文中只有部分相关信息，请只回答能被上下文支持的部分。
-    5. 不要编造制度、金额、日期、审批人、权限范围或例外情况。
-    6. 涉及金额、时间、天数、审批流程时，必须严格依据上下文。
-    7. 回答要简洁、清楚，优先直接回答用户问题。
-    """,
+        1. 只能根据【知识库上下文】回答，不得使用外部知识。
+        2. 不得编造制度、金额、日期、审批人、权限范围或例外情况。
+        3. 如果上下文能够通过明确规则回答用户问题，即使没有出现完全相同的问法，也应基于规则作出有限、可解释的判断。
+        4. 允许进行以下类型的有限业务推理：
+           - 将酒店星级问题转换为住宿费用是否超过标准；
+           - 将口语问题对应到上下文中的正式制度术语；
+           - 根据“标准、条件、审批规则”回答是否允许及需要什么手续。
+        5. 有限推理必须能从上下文直接推出，不得补充上下文没有提供的事实。
+        6. 如果上下文没有直接规定“可以”或“不可以”，但提供了判断条件，应明确说明：
+           - 制度未直接按该维度限制；
+           - 实际应依据哪些条件判断。
+        7. 如果上下文只有部分信息，只回答能够被支持的部分。
+        8. 只有在上下文完全没有可用于回答的信息时，才只回答：
+           知识库中未找到相关信息。
+        9. 涉及金额、时间、天数和审批流程时，必须严格依据上下文。
+        10. 回答应简洁、清楚，优先直接回答用户问题。
+        """,
                 ),
                 (
                     "human",
                     """
-    【用户问题】
-    {question}
+        【用户原始问题】
+        {original_question}
 
-    【知识库上下文】
-    {context}
+        【改写后的检索问题】
+        {rewritten_question}
 
-    请根据知识库上下文回答用户问题。
-    """,
+        【知识库上下文】
+        {context}
+
+        请根据知识库上下文回答用户原始问题。
+        """,
                 ),
             ]
         )
@@ -322,7 +361,8 @@ score: {score}
 
         answer = chain.invoke(
             {
-                "question": original_question,
+                "original_question": original_question,
+                "rewritten_question": rewritten_question,
                 "context": context,
             }
         )
@@ -348,3 +388,6 @@ score: {score}
             "metadata_filter": metadata_filter,
             "confidence": confidence_result.to_dict() if confidence_result else None,
         }
+
+
+

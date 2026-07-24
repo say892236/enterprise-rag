@@ -68,3 +68,7 @@ logs/
 
 # Docker 临时文件
 *.pid
+
+
+# Docker runtime data
+volumes/

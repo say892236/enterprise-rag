@@ -134,6 +134,15 @@ class MilvusRetriever:
                 )
             )
 
+
+
+        for doc in documents[:3]:
+            print(
+                doc.metadata.get("source"),
+                doc.page_content[:50]
+            )
+
+
         return documents
 
     def count(self) -> int | None:

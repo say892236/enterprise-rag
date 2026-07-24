@@ -32,7 +32,7 @@ def test_milvus_retrieve_travel_policy() -> None:
     retriever = MilvusRetriever()
 
     docs = retriever.retrieve(
-        query="员工出差住宿标准是什么？",
+        query="员工出差是否可以入住五星级酒店？",
         top_k=3,
         metadata_filter={
             "source": "travel_policy.md",
