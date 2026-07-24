@@ -1,0 +1,41 @@
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+
+# 本地环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志
+logs/
+*.log
+
+# 本地向量库数据
+data/vectorstore/
+
+# 评估输出
+data/eval/
+
+# 测试缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 归档文件
+archive/

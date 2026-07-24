@@ -1,0 +1,68 @@
+# =========================
+# Core
+# =========================
+
+python-dotenv
+requests
+
+
+# =========================
+# LangChain
+# =========================
+
+langchain
+langchain-core
+langchain-community
+langchain-chroma
+langchain-huggingface
+langchain-deepseek
+
+
+# =========================
+# Vector Store
+# =========================
+
+chromadb
+
+
+# =========================
+# Embedding / Reranker
+# =========================
+
+sentence-transformers
+transformers
+torch
+FlagEmbedding
+
+
+# =========================
+# BM25 / Chinese Tokenization
+# =========================
+
+rank-bm25
+jieba
+
+
+# =========================
+# FastAPI
+# =========================
+
+fastapi
+uvicorn
+pydantic
+
+
+# =========================
+# Auth
+# =========================
+
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+
+# =========================
+# Milvus Vector Store
+# =========================
+
+pymilvus[milvus-lite]
+langchain-milvus

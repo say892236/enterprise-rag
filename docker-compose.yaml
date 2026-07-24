@@ -1,0 +1,140 @@
+services:
+  # =========================
+  # FastAPI RAG 服务
+  # =========================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: enterprise-rag-api
+
+    # 容器启动后执行的命令
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - .env
+
+    environment:
+      # Docker Compose 环境下，FastAPI 容器连接 Milvus Server
+      VECTOR_DB: milvus
+      MILVUS_CONNECTION_URI: http://milvus:19530
+
+      # 使用容器内挂载的 HuggingFace 缓存
+      HF_HOME: /root/.cache/huggingface
+      TRANSFORMERS_CACHE: /root/.cache/huggingface
+
+      # 如果你已经把模型缓存挂进来了，可以开启离线模式，避免容器启动时访问 HuggingFace
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+
+    volumes:
+      # 开发阶段挂载整个项目代码，避免每次改 Python 文件都重新 build 镜像
+      - .:/app
+
+      # 挂载 HuggingFace 缓存，避免重复下载模型
+      - ${USERPROFILE}/.cache/huggingface:/root/.cache/huggingface
+
+    depends_on:
+      milvus:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  # =========================
+  # Milvus 元数据存储
+  # =========================
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.25
+
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+
+    volumes:
+      - ./volumes/etcd:/etcd
+
+    command: >
+      etcd
+      -advertise-client-urls=http://etcd:2379
+      -listen-client-urls http://0.0.0.0:2379
+      --data-dir /etcd
+
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+    restart: unless-stopped
+
+  # =========================
+  # Milvus 对象存储
+  # =========================
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+    volumes:
+      - ./volumes/minio:/minio_data
+
+    command: minio server /minio_data --console-address ":9001"
+
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+    restart: unless-stopped
+
+  # =========================
+  # Milvus Server
+  # =========================
+  milvus:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.5.27
+
+    command: ["milvus", "run", "standalone"]
+
+    security_opt:
+      - seccomp:unconfined
+
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_REGION: us-east-1
+
+    volumes:
+      - ./volumes/milvus:/var/lib/milvus
+
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+
+    depends_on:
+      - etcd
+      - minio
+
+    restart: unless-stopped
