@@ -94,6 +94,11 @@ class ChatRequest(BaseModel):
         description="是否启用 Reranker 重排",
     )
 
+    enable_compression: bool = Field(
+        default=True,
+        description="是否启用 Context Compression 上下文压缩",
+    )
+
     @field_validator("question")
     @classmethod
     def validate_question(cls, value: str) -> str:
@@ -172,6 +177,57 @@ class SourceItem(BaseModel):
         rerank_score: Optional[float] = None
 
 
+class QueryRouteInfo(BaseModel):
+    """
+    Query Router 查询路由信息。
+
+    用于说明本次问题被识别为什么类型，
+    以及最终启用了哪些检索增强策略。
+    """
+
+    query_type: str = Field(description="查询类型，例如 structured_query / semantic_query / exact_code_query")
+    enable_rewrite: bool = Field(description="本次请求最终是否启用 Query Rewrite")
+    enable_rerank: bool = Field(description="本次请求最终是否启用 Reranker")
+    enable_compression: bool = Field(
+        default=True,
+        description="是否启用 Context Compression 上下文压缩",
+    )
+    reason: str = Field(description="Query Router 判断原因")
+
+
+class RAGTimingInfo(BaseModel):
+    """
+    RAG 链路内部耗时信息。
+
+    用于分析一次问答中各阶段的耗时占比，
+    方便定位性能瓶颈。
+    """
+
+    route_seconds: float = Field(description="Query Router 路由耗时")
+    rewrite_seconds: float = Field(description="Query Rewrite 耗时")
+    retrieve_seconds: float = Field(description="Retriever 检索耗时")
+    rerank_seconds: float = Field(description="Reranker 重排耗时")
+    confidence_seconds: float = Field(description="Confidence Guard 置信度判断耗时")
+    compression_seconds: float = Field(description="Context Compression 上下文压缩耗时")
+    context_build_seconds: float = Field(description="上下文拼接耗时")
+    llm_seconds: float = Field(description="LLM 生成耗时")
+    total_chain_seconds: float = Field(description="RAG Chain 内部总耗时")
+
+
+class ContextCompressionInfo(BaseModel):
+    """
+    Context Compression 上下文压缩信息。
+
+    用于观察压缩前后上下文长度变化。
+    """
+
+    enabled: bool = Field(description="本次是否启用上下文压缩")
+    original_chars: int = Field(description="压缩前上下文总字符数")
+    compressed_chars: int = Field(description="压缩后上下文总字符数")
+    compression_ratio: float = Field(description="压缩后字符数 / 压缩前字符数")
+    doc_count: int = Field(description="参与构造上下文的文档片段数量")
+
+
 class ChatResponse(BaseModel):
     """
     用户问答响应体。
@@ -192,6 +248,21 @@ class ChatResponse(BaseModel):
     metadata_filter: Optional[Dict[str, Any]] = Field(
         default=None,
         description="本次请求最终生效的 metadata 过滤条件",
+    )
+
+    query_route: Optional[QueryRouteInfo] = Field(
+        default=None,
+        description="本次请求的 Query Router 路由结果",
+    )
+
+    timings: Optional[RAGTimingInfo] = Field(
+        default=None,
+        description="RAG 链路内部各阶段耗时",
+    )
+
+    compression: Optional[ContextCompressionInfo] = Field(
+        default=None,
+        description="Context Compression 上下文压缩信息",
     )
 
     cost_time_seconds: float = Field(description="本次请求总耗时，单位：秒")

@@ -201,6 +201,7 @@ def chat(
             metadata_filter=effective_metadata_filter,
             enable_rewrite=chat_request.enable_rewrite,
             enable_rerank=chat_request.enable_rerank,
+            enable_compression=chat_request.enable_compression,
         )
 
         # 3. 计算耗时
@@ -220,6 +221,9 @@ def chat(
             answer=result["answer"],
             sources=sources,
             metadata_filter=effective_metadata_filter,
+            query_route=result.get("query_route"),
+            timings=result.get("timings"),
+            compression=result.get("compression"),
             cost_time_seconds=cost_time,
         )
 

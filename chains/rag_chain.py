@@ -1,6 +1,7 @@
 # chains/rag_chain.py
-
+import time
 from typing import List, Dict, Any, Optional
+
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
@@ -12,6 +13,8 @@ from langchain_core.output_parsers import StrOutputParser
 from reranker.bge_reranker import BGEReranker
 from retriever.chroma_retriever import ChromaRetriever
 from rewriter.query_rewriter import QueryRewriter
+from retriever.query_router import QueryRouter
+from compressor.context_compressor import ContextCompressor
 
 load_dotenv()
 
@@ -38,11 +41,13 @@ class EnterpriseRAGChain:
         self,
         retriever: ChromaRetriever,
         reranker: Optional[BGEReranker] = None,
-        rewriter: Optional[QueryRewriter]=None,
+        rewriter: Optional[QueryRewriter]= None,
         llm_model: str = "deepseek-v4-flash",
         llm_provider: str = "deepseek",
         temperature: float = 0.0,
         confidence_guard: Optional[BGEReranker] = None,
+        query_router: Optional[QueryRouter] = None,
+        context_compressor: Optional[ContextCompressor] = None,
     ):
         self.retriever = retriever
         self.reranker = reranker
@@ -53,8 +58,14 @@ class EnterpriseRAGChain:
             temperature=temperature,
         )
         self.confidence_guard = confidence_guard
+        # Query Router 用于根据问题类型动态控制 rewrite / rerank 策略
+        self.query_router = query_router or QueryRouter()
+
+        # Context Compressor 用于压缩送入 LLM 的上下文
+        self.context_compressor = context_compressor or ContextCompressor()
 
         parser = StrOutputParser()
+
 
         self.prompt = ChatPromptTemplate.from_messages(
             [
@@ -192,6 +203,7 @@ score: {score}
             metadata_filter: dict | None = None,
             enable_rewrite: bool = True,
             enable_rerank: bool = True,
+            enable_compression: bool = True,
     ) -> dict:
         """
         执行一次企业级 RAG 问答。
@@ -211,28 +223,82 @@ score: {score}
         # 后面所有拒答都用同一句，方便 API 层、测试和前端统一判断。
         no_info_answer = "知识库中未找到相关信息。"
 
+        # 记录 RAG Chain 内部各阶段耗时。
+        # 这些数据用于 API 调试、性能优化和评估报告。
+        chain_start_time = time.perf_counter()
+
+        timings = {
+            "route_seconds": 0.0,
+            "rewrite_seconds": 0.0,
+            "retrieve_seconds": 0.0,
+            "rerank_seconds": 0.0,
+            "confidence_seconds": 0.0,
+            "compression_seconds": 0.0,
+            "context_build_seconds": 0.0,
+            "llm_seconds": 0.0,
+            "total_chain_seconds": 0.0,
+        }
+
         # 1. 保存原始问题。
         # 最终回答时仍然使用 original_question，避免用户看到被改写后的问题。
         original_question = question
 
-        # 2. 查询改写。
+        # 2. Query Router 查询路由。
+        # 根据问题类型动态决定是否启用 rewrite / rerank。
+        # 注意：Router 只能关闭策略，不能强行覆盖 API 层手动关闭的参数。
+        route_start_time = time.perf_counter()
+
+        route_result = self.query_router.route(original_question)
+
+        timings["route_seconds"] = round(
+            time.perf_counter() - route_start_time,
+            3,
+        )
+
+        final_enable_rewrite = enable_rewrite and route_result.enable_rewrite
+        final_enable_rerank = enable_rerank and route_result.enable_rerank
+
+        print("=" * 80)
+        print("[DEBUG Query Router]")
+        print("question:", original_question)
+        print("query_type:", route_result.query_type)
+        print("final_enable_rewrite:", final_enable_rewrite)
+        print("final_enable_rerank:", final_enable_rerank)
+        print("reason:", route_result.reason)
+        print("=" * 80)
+
+        # 3. 查询改写。
         # 检索用 rewritten_question，回答展示仍用 original_question。
-        if enable_rewrite and self.rewriter is not None:
+        rewrite_start_time = time.perf_counter()
+
+        if final_enable_rewrite and self.rewriter is not None:
             rewritten_question = self.rewriter.rewrite(original_question)
         else:
             rewritten_question = original_question
 
+        timings["rewrite_seconds"] = round(
+            time.perf_counter() - rewrite_start_time,
+            3,
+        )
+
         # 3. 初始检索。
         # metadata_filter 已经在 API 层根据用户角色做过权限过滤。
+        retrieve_start_time = time.perf_counter()
+
         retrieved_docs = self.retriever.retrieve(
             query=rewritten_question,
             top_k=retrieve_top_k,
             metadata_filter=metadata_filter,
         )
 
-        # 4. Reranker 重排。
-        # 如果关闭 rerank，直接取检索结果前 rerank_top_k 个。
-        if enable_rerank and self.reranker is not None:
+        timings["retrieve_seconds"] = round(
+            time.perf_counter() - retrieve_start_time,
+            3,
+        )
+
+        rerank_start_time = time.perf_counter()
+
+        if final_enable_rerank and self.reranker is not None:
             final_docs = self.reranker.rerank(
                 query=rewritten_question,
                 documents=retrieved_docs,
@@ -241,17 +307,26 @@ score: {score}
         else:
             final_docs = retrieved_docs[:rerank_top_k]
 
+        timings["rerank_seconds"] = round(
+            time.perf_counter() - rerank_start_time,
+            3,
+        )
         # 5. 低置信度拒答。
         # 如果检索结果明显和问题无关，不进入 LLM，直接返回拒答。
         confidence_result = None
+
+        confidence_start_time = time.perf_counter()
 
         if self.confidence_guard is not None:
             confidence_result = self.confidence_guard.check(
                 query=rewritten_question,
                 documents=final_docs,
             )
-
             if not confidence_result.passed:
+                timings["total_chain_seconds"] = round(
+                    time.perf_counter() - chain_start_time,
+                    3,
+                )
                 return {
                     "question": original_question,
                     "rewritten_question": rewritten_question,
@@ -260,6 +335,20 @@ score: {score}
                     "retrieved_docs": final_docs,
                     "metadata_filter": metadata_filter,
                     "confidence": confidence_result.to_dict(),
+                    "query_route": {
+                        "query_type": route_result.query_type,
+                        "enable_rewrite": final_enable_rewrite,
+                        "enable_rerank": final_enable_rerank,
+                        "reason": route_result.reason,
+                    },
+                    "compression": {
+                        "enabled": False,
+                        "original_chars": 0,
+                        "compressed_chars": 0,
+                        "compression_ratio": 0,
+                        "doc_count": 0,
+                    },
+                    "timings" : timings,
                 }
 
             # 临时调试：检查最终送给 LLM 的文档
@@ -282,12 +371,56 @@ score: {score}
 
             print("=" * 80)
 
+            timings["confidence_seconds"] = round(
+                time.perf_counter() - confidence_start_time,
+                3,
+            )
+
         # 6. 构造上下文。
         # 这里不依赖 self.format_context()，直接在 invoke 内部拼接上下文，
         # 避免当前类中没有 format_context 方法导致 AttributeError。
+        compression_start_time = time.perf_counter()
+
+        context_docs = final_docs
+
+        original_context_chars = sum(
+            len(doc.page_content or "")
+            for doc in final_docs
+        )
+
+        if enable_compression and self.context_compressor is not None:
+            context_docs = self.context_compressor.compress_documents(
+                query=rewritten_question,
+                documents=final_docs,
+            )
+
+        compressed_context_chars = sum(
+            len(doc.page_content or "")
+            for doc in context_docs
+        )
+
+        timings["compression_seconds"] = round(
+            time.perf_counter() - compression_start_time,
+            3,
+        )
+
+        compression_info = {
+            "enabled": enable_compression and self.context_compressor is not None,
+            "original_chars": original_context_chars,
+            "compressed_chars": compressed_context_chars,
+            "compression_ratio": round(
+                compressed_context_chars / original_context_chars,
+                4,
+            )
+            if original_context_chars > 0
+            else 0,
+            "doc_count": len(context_docs),
+        }
+
+        context_build_start_time = time.perf_counter()
         context_parts = []
 
-        for index, doc in enumerate(final_docs, start=1):
+        for index, doc in enumerate(context_docs, start=1):
             metadata = doc.metadata or {}
 
             source = metadata.get("source", "unknown")
@@ -305,6 +438,11 @@ score: {score}
             )
 
         context = "\n\n".join(context_parts)
+
+        timings["context_build_seconds"] = round(
+            time.perf_counter() - context_build_start_time,
+            3,
+        )
 
         # 7. 构造 Prompt。
         # 规则重点：
@@ -357,13 +495,21 @@ score: {score}
         # 8. 调用 LLM。
         chain = prompt | self.llm | StrOutputParser()
 
+        llm_start_time = time.perf_counter()
+
         answer = chain.invoke(
             {
                 "original_question": original_question,
                 "rewritten_question": rewritten_question,
                 "context": context,
             }
+
         )
+        timings["llm_seconds"] = round(
+            time.perf_counter() - llm_start_time,
+            3,
+        )
+
 
         # 9. 清理答案前后空白。
         answer = answer.strip()
@@ -376,6 +522,11 @@ score: {score}
         else:
             sources = self.format_sources(final_docs)
 
+        timings["total_chain_seconds"] = round(
+            time.perf_counter() - chain_start_time,
+            3,
+        )
+
         # 11. 返回完整结果。
         return {
             "question": original_question,
@@ -385,6 +536,14 @@ score: {score}
             "retrieved_docs": final_docs,
             "metadata_filter": metadata_filter,
             "confidence": confidence_result.to_dict() if confidence_result else None,
+            "query_route": {
+                "query_type": route_result.query_type,
+                "enable_rewrite": final_enable_rewrite,
+                "enable_rerank": final_enable_rerank,
+                "reason": route_result.reason,
+            },
+            "compression": compression_info,
+            "timings": timings
         }
 
 
