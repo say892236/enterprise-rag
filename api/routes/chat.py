@@ -8,10 +8,9 @@ POST /chat
 """
 import logging
 import time
-import uuid
 from typing import List, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException,Request
 
 from chains.rag_chain import EnterpriseRAGChain
 from api.dependencies import get_rag_chain
@@ -156,10 +155,10 @@ def format_sources(sources: List[Dict[str, Any]]) -> List[SourceItem]:
     },
 )
 def chat(
-    request: ChatRequest,
+    request: Request,
+    chat_request: ChatRequest,
     rag_chain: EnterpriseRAGChain = Depends(get_rag_chain),
 
-    # 当前登录用户由 JWT Token 自动解析
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
@@ -170,14 +169,18 @@ def chat(
     当前用户身份来自 Authorization Bearer Token。
     """
 
-    request_id = str(uuid.uuid4())
+    request_id = getattr(
+        request.state,
+        "request_id",
+        None,
+    )
     start_time = time.perf_counter()
 
     try:
         # 1. 根据当前登录用户角色，生成最终权限 filter
         effective_metadata_filter = build_effective_metadata_filter(
             user_role=current_user["role"],
-            request_metadata_filter=request.metadata_filter,
+            request_metadata_filter=chat_request.metadata_filter,
         )
 
         logger.info(
@@ -185,19 +188,19 @@ def chat(
             request_id,
             current_user["username"],
             current_user["role"],
-            request.question,
+            chat_request.question,
             effective_metadata_filter,
         )
 
 
         # 2. 执行完整 RAG 链路
         result = rag_chain.invoke(
-            question=request.question,
-            retrieve_top_k=request.retrieve_top_k,
-            rerank_top_k=request.rerank_top_k,
+            question=chat_request.question,
+            retrieve_top_k=chat_request.retrieve_top_k,
+            rerank_top_k=chat_request.rerank_top_k,
             metadata_filter=effective_metadata_filter,
-            enable_rewrite=request.enable_rewrite,
-            enable_rerank=request.enable_rerank,
+            enable_rewrite=chat_request.enable_rewrite,
+            enable_rerank=chat_request.enable_rerank,
         )
 
         # 3. 计算耗时

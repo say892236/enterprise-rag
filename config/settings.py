@@ -108,13 +108,13 @@ LLM_TEMPERATURE = 0.0
 # ==========================
 
 # Dense 召回数量
-DENSE_TOP_K = 10
+DENSE_TOP_K = 5
 
 # BM25 召回数量
-BM25_TOP_K = 10
+BM25_TOP_K = 5
 
 # Hybrid 融合后返回数量
-HYBRID_TOP_K = 10
+HYBRID_TOP_K = 5
 
 # Reranker 最终保留数量
 RERANK_TOP_K = 5

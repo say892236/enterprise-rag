@@ -20,7 +20,6 @@ from config.settings import (
     API_RELOAD,
 )
 
-
 def main():
     """
     启动 FastAPI 服务。
@@ -32,7 +31,6 @@ def main():
         port=API_PORT,
         reload=API_RELOAD,
     )
-
 
 if __name__ == "__main__":
     main()

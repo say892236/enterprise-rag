@@ -34,14 +34,22 @@ async def http_exception_handler(
 
     detail = exc.detail
 
+    request_id = getattr(
+        request.state,
+        "request_id",
+        None,
+    )
+
     if isinstance(detail, dict):
         error_code = detail.get("error_code", "HTTP_ERROR")
         message = detail.get("message", "请求失败")
-        request_id = detail.get("request_id")
+
+        # 如果 detail 里手动传了 request_id，就优先使用；
+        # 否则使用中间件生成的 request_id。
+        request_id = detail.get("request_id") or request_id
     else:
         error_code = "HTTP_ERROR"
         message = str(detail)
-        request_id = None
 
     return JSONResponse(
         status_code=exc.status_code,
@@ -81,7 +89,11 @@ async def validation_exception_handler(
             "success": False,
             "error_code": "VALIDATION_ERROR",
             "message": "请求参数校验失败，请检查请求体格式和字段类型",
-            "request_id": None,
+            "request_id": getattr(
+    request.state,
+    "request_id",
+    None,
+),
             "errors": errors,
         },
     )

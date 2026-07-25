@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.core.logging_config import setup_logging
+from api.core.request_logging import RequestLoggingMiddleware
 from api.core.exceptions import (
     http_exception_handler,
     validation_exception_handler,
@@ -85,6 +86,9 @@ app = FastAPI(
     lifespan=lifespan,
     openapi_tags=tags_metadata,
 )
+
+# 注册请求日志中间件
+app.add_middleware(RequestLoggingMiddleware)
 
 # 注册全局异常处理器
 app.add_exception_handler(
