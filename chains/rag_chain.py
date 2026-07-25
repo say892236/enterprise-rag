@@ -1,7 +1,8 @@
 # chains/rag_chain.py
+import logging
+import os
 import time
 from typing import List, Dict, Any, Optional
-
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
@@ -17,6 +18,12 @@ from retriever.query_router import QueryRouter
 from compressor.context_compressor import ContextCompressor
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# 是否开启 RAG 详细调试日志
+# 默认关闭，避免生产日志刷屏
+RAG_DEBUG = os.getenv("RAG_DEBUG", "false").lower() == "true"
 
 
 class EnterpriseRAGChain:
@@ -258,14 +265,16 @@ score: {score}
         final_enable_rewrite = enable_rewrite and route_result.enable_rewrite
         final_enable_rerank = enable_rerank and route_result.enable_rerank
 
-        print("=" * 80)
-        print("[DEBUG Query Router]")
-        print("question:", original_question)
-        print("query_type:", route_result.query_type)
-        print("final_enable_rewrite:", final_enable_rewrite)
-        print("final_enable_rerank:", final_enable_rerank)
-        print("reason:", route_result.reason)
-        print("=" * 80)
+
+        if RAG_DEBUG:
+            logger.debug(
+                "Query Router | question=%s | query_type=%s | final_enable_rewrite=%s | final_enable_rerank=%s | reason=%s",
+                original_question,
+                route_result.query_type,
+                final_enable_rewrite,
+                final_enable_rerank,
+                route_result.reason,
+            )
 
         # 3. 查询改写。
         # 检索用 rewritten_question，回答展示仍用 original_question。
@@ -352,24 +361,22 @@ score: {score}
                 }
 
             # 临时调试：检查最终送给 LLM 的文档
-            print("=" * 80)
-            print("[DEBUG Final Docs Before LLM]")
-            print("confidence passed:", confidence_result.passed)
-            print("confidence reason:", confidence_result.reason)
-            print("final docs count:", len(final_docs))
-
-            for index, doc in enumerate(final_docs, start=1):
-                print(
-                    f"doc {index}:",
-                    "source=", doc.metadata.get("source"),
-                    "header_2=", doc.metadata.get("header_2"),
-                )
-                print(
-                    "content:",
-                    doc.page_content[:300].replace("\n", " "),
+            if RAG_DEBUG:
+                logger.debug(
+                    "Final Docs Before LLM | confidence_passed=%s | confidence_reason=%s | final_docs_count=%s",
+                    confidence_result.passed,
+                    confidence_result.reason,
+                    len(final_docs),
                 )
 
-            print("=" * 80)
+                for index, doc in enumerate(final_docs, start=1):
+                    logger.debug(
+                        "Final Doc %s | source=%s | header_2=%s | content_preview=%s",
+                        index,
+                        doc.metadata.get("source"),
+                        doc.metadata.get("header_2"),
+                        doc.page_content[:300].replace("\n", " "),
+                    )
 
             timings["confidence_seconds"] = round(
                 time.perf_counter() - confidence_start_time,

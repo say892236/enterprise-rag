@@ -19,7 +19,8 @@ Hybrid Retriever 模块。
 - 排名第 2 的文档贡献略低。
 - 同时被 Dense 和 BM25 找到的文档，会获得两边加分。
 """
-
+import logging
+import os
 from typing import List, Dict, Any, Optional
 
 from langchain_core.documents import Document
@@ -27,6 +28,12 @@ from langchain_core.documents import Document
 from retriever.chroma_retriever import ChromaRetriever
 from retriever.bm25_retriever import BM25Retriever
 from retriever.milvus_retriever import MilvusRetriever
+
+
+logger = logging.getLogger(__name__)
+
+# 是否开启 RAG 详细调试日志
+RAG_DEBUG = os.getenv("RAG_DEBUG", "false").lower() == "true"
 
 
 class HybridRetriever:
@@ -294,18 +301,23 @@ class HybridRetriever:
             reverse=True,
         )
 
-
-        for doc in fused_docs[:5]:
-            print(
-                "source:",
-                doc.metadata.get("source"),
-                "| header:",
-                doc.metadata.get("header_2"),
-                "| score:",
-                doc.metadata.get("hybrid_score")
+        if RAG_DEBUG:
+            logger.debug(
+                "Hybrid Retriever | dense_docs=%s | bm25_docs=%s | fused_docs=%s | final_k=%s",
+                len(dense_docs),
+                len(bm25_docs),
+                len(fused_docs),
+                final_k,
             )
 
-        print("=" * 50)
-
+            for index, doc in enumerate(fused_docs[:5], start=1):
+                logger.debug(
+                    "Hybrid Top %s | source=%s | header_2=%s | hybrid_score=%s | retrieval_sources=%s",
+                    index,
+                    doc.metadata.get("source"),
+                    doc.metadata.get("header_2"),
+                    doc.metadata.get("hybrid_score"),
+                    doc.metadata.get("retrieval_sources"),
+                )
         # 8. 返回最终 top_k
         return fused_docs[:final_k]

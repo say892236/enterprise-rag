@@ -8,13 +8,19 @@ RAG 检索置信度判断模块。
 2. 如果明显无关，则提前拒答，避免 LLM 根据无关上下文硬编。
 3. 第一版采用关键词重叠规则，不直接依赖 reranker 分数。
 """
-
+import os
+import logging
 import re
 from dataclasses import dataclass
 from typing import List, Set
 
 import jieba
 from langchain_core.documents import Document
+
+logger = logging.getLogger(__name__)
+
+# 是否开启 RAG 详细调试日志
+RAG_DEBUG = os.getenv("RAG_DEBUG", "false").lower() == "true"
 
 
 # 常见无意义词，避免“公司、员工、什么”等词造成误判
@@ -295,25 +301,27 @@ class RetrievalConfidenceGuard:
             documents=checked_docs,
         )
 
-
-        for index, doc in enumerate(checked_docs, start=1):
-            metadata = doc.metadata or {}
-
-            print(
-                f"doc {index}:",
-                "source=", metadata.get("source"),
-                "header_1=", metadata.get("header_1"),
-                "header_2=", metadata.get("header_2"),
-                "rerank_score=", metadata.get("rerank_score"),
+        if RAG_DEBUG:
+            logger.debug(
+                "Confidence Guard | query=%s | checked_docs_count=%s | overlap_count=%s | domain_match=%s",
+                query,
+                len(checked_docs),
+                overlap_count,
+                domain_match,
             )
 
-            print(
-                "content:",
-                doc.page_content[:120].replace("\n", " "),
-            )
+            for index, doc in enumerate(checked_docs, start=1):
+                metadata = doc.metadata or {}
 
-        print("=" * 80)
-
+                logger.debug(
+                    "Confidence Guard Doc %s | source=%s | header_1=%s | header_2=%s | rerank_score=%s | content_preview=%s",
+                    index,
+                    metadata.get("source"),
+                    metadata.get("header_1"),
+                    metadata.get("header_2"),
+                    metadata.get("rerank_score"),
+                    doc.page_content[:120].replace("\n", " "),
+                )
         # 关键词有足够重叠，直接放行
         if overlap_count >= self.min_overlap_count:
             return ConfidenceResult(

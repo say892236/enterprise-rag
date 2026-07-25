@@ -9,7 +9,8 @@ Milvus Dense Retriever 封装模块。
 3. 支持 metadata_filter 中的 source 过滤。
 4. 将 Milvus score 写入 Document.metadata，方便后续 Hybrid / Reranker / API 返回。
 """
-
+import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from langchain_core.documents import Document
@@ -20,6 +21,10 @@ from vectorstore.milvus_store import (
     load_milvus_vectorstore,
 )
 
+logger = logging.getLogger(__name__)
+
+# 是否开启 RAG 详细调试日志
+RAG_DEBUG = os.getenv("RAG_DEBUG", "false").lower() == "true"
 
 class MilvusRetriever:
     """
@@ -134,14 +139,21 @@ class MilvusRetriever:
                 )
             )
 
-
-
-        for doc in documents[:3]:
-            print(
-                doc.metadata.get("source"),
-                doc.page_content[:50]
+        if RAG_DEBUG:
+            logger.debug(
+                "Milvus Retriever | returned_docs=%s",
+                len(documents),
             )
 
+            for index, doc in enumerate(documents[:3], start=1):
+                logger.debug(
+                    "Milvus Top %s | source=%s | header_2=%s | milvus_score=%s | content_preview=%s",
+                    index,
+                    doc.metadata.get("source"),
+                    doc.metadata.get("header_2"),
+                    doc.metadata.get("milvus_score"),
+                    doc.page_content[:50].replace("\n", " "),
+                )
 
         return documents
 
