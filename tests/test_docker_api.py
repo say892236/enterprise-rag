@@ -316,9 +316,11 @@ def test_no_answer(token: str) -> None:
     answer = data.get("answer", "")
     sources = data.get("sources", [])
 
+    NO_INFO_ANSWER = "根据现有知识库内容，未能查询到相关信息。请调整提问方式，或咨询相关行政/HR 人员。"
+
     assert_true(
-        answer == "知识库中未找到相关信息。",
-        f"低置信度拒答答案异常：{answer}",
+        answer == NO_INFO_ANSWER,
+    f"低置信度拒答答案异常：{answer}",
     )
 
     assert_true(
@@ -358,6 +360,45 @@ def test_permission_denied(token: str) -> None:
 
     print_pass("权限控制通过")
 
+def test_company_profile_answer(token: str) -> None:
+    """
+    测试公司基础信息问答。
+
+    目的：
+    1. 确认 company_kb.md 可以被正常召回。
+    2. 防止 Confidence Guard 误杀公司概览类问题。
+    3. 覆盖“公司名称 / 公司简称 / 英文名”这类企业基础信息查询。
+    """
+
+    print_step("测试公司基础信息问答")
+
+    response = chat(
+        token=token,
+        question="我们公司名字叫什么？",
+    )
+
+    assert_true(
+        response.status_code == 200,
+        f"/chat 公司基础信息问答状态码异常：{response.status_code}, body={response.text}",
+    )
+
+    data = get_chat_data(response)
+
+    answer = data.get("answer", "")
+    sources = data.get("sources", [])
+
+    assert_true(
+        "星澜智能科技有限公司" in answer,
+        f"公司名称未正确命中，answer={answer}",
+    )
+
+    assert_true(
+        any(source.get("source") == "company_kb.md" for source in sources),
+        f"公司基础信息未引用 company_kb.md，sources={sources}",
+    )
+
+    print_pass("公司基础信息问答通过")
+
 
 def run_all_tests() -> None:
     """
@@ -375,6 +416,7 @@ def run_all_tests() -> None:
     token = test_login()
 
     test_chat_answer(token)
+    test_company_profile_answer(token)
     test_no_answer(token)
     test_permission_denied(token)
 

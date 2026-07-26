@@ -17,7 +17,7 @@ from pipelines.rag_pipeline import build_hybrid_rag_chain
 
 
 # 固定拒答文本，必须和 chains/rag_chain.py 中保持一致
-NO_INFO_ANSWER = "知识库中未找到相关信息。"
+NO_INFO_ANSWER = "根据现有知识库内容，未能查询到相关信息。请调整提问方式，或咨询相关行政/HR 人员。"
 
 
 # 知识库中不存在的问题集合

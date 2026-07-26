@@ -686,7 +686,7 @@ def evaluate_no_answer_case(
     answer = str(chat_data.get("answer", ""))
     sources = extract_source_names(chat_data)
 
-    expected_answer = "知识库中未找到相关信息。"
+    expected_answer = "根据现有知识库内容，未能查询到相关信息。请调整提问方式，或咨询相关行政/HR 人员。"
 
     no_answer_correct = 1.0 if (
         status_code == 200

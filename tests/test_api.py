@@ -507,7 +507,7 @@ def test_chat_low_confidence_answer(access_token: str) -> None:
     测试知识库无关问题触发低置信度拒答。
 
     问题“公司食堂几点开门？”不在当前知识库中，
-    预期直接返回“知识库中未找到相关信息。”，且 sources 为空。
+    预期直接返回"根据现有知识库内容，未能查询到相关信息。请调整提问方式，或咨询相关行政/HR 人员。"，且 sources 为空。
     """
 
     response = requests.post(
@@ -541,7 +541,7 @@ def test_chat_low_confidence_answer(access_token: str) -> None:
 
     data = response_data["data"]
 
-    assert data["answer"] == "知识库中未找到相关信息。", (
+    assert data["answer"] == "根据现有知识库内容，未能查询到相关信息。请调整提问方式，或咨询相关行政/HR 人员。", (
         f"低置信度拒答答案不符合预期，实际 answer={data.get('answer')}，完整响应={data}"
     )
 

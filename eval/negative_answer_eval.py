@@ -16,7 +16,7 @@ python -m eval.negative_answer_eval
 from pipelines.rag_pipeline import build_hybrid_rag_chain
 
 
-NO_INFO_ANSWER = "知识库中未找到相关信息。"
+NO_INFO_ANSWER = "根据现有知识库内容，未能查询到相关信息。请调整提问方式，或咨询相关行政/HR 人员。"
 
 NEGATIVE_ANSWER_TEST_CASES = [
     {

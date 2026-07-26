@@ -85,6 +85,29 @@ STOP_WORDS = {
 # 业务领域关键词。
 # 用来避免“语义相关但字面重叠少”的问题被误拒答。
 DOMAIN_KEYWORDS = {
+"company_profile": [
+    "公司",
+    "公司名",
+    "公司名字",
+    "公司名称",
+    "公司全称",
+    "简称",
+    "英文名",
+    "英文名称",
+    "总部",
+    "成立时间",
+    "成立于",
+    "公司概览",
+    "公司基本信息",
+    "公司介绍",
+    "企业介绍",
+    "使命",
+    "愿景",
+    "品牌口号",
+    "核心价值观",
+    "星澜智能",
+    "StellarAI",
+],
     "travel": [
         "出差",
         "差旅",
@@ -148,6 +171,7 @@ SOURCE_DOMAIN_MAP = {
     "it_security_policy.md": "security",
     "hr_salary_policy.md": "hr",
     "employee_handbook.md": "hr",
+    "company_kb.md": "company_profile",
 }
 
 @dataclass
