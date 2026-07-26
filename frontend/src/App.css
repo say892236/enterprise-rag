@@ -1,0 +1,848 @@
+/* src/App.css */
+
+/*
+ * 全局基础样式。
+ * 不依赖 UI 组件库，方便先快速完成前端 MVP。
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f3f4f6;
+  color: #111827;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+pre {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 登录页 */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 32px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.login-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.login-subtitle {
+  margin: 12px 0 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+/* 表单 */
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.form-group input {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  outline: none;
+}
+
+.form-group input:focus,
+textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.primary-button {
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: white;
+  font-weight: 700;
+}
+
+.primary-button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: white;
+  color: #374151;
+  font-weight: 600;
+}
+
+.error-box {
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.login-tip {
+  margin-top: 16px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+/* 主页面 */
+
+.chat-page {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.top-bar h1 {
+  margin: 0 0 6px;
+}
+
+.top-bar p {
+  margin: 0;
+  color: #6b7280;
+}
+
+.top-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* 状态卡片 */
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 180px 180px 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.status-card {
+  padding: 16px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.status-card.wide {
+  min-width: 0;
+}
+
+.status-title {
+  margin-bottom: 10px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.status-ok {
+  color: #047857;
+  font-weight: 800;
+}
+
+.status-bad {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+/* 主体布局 */
+
+.main-layout {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.ask-panel,
+.result-panel {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.ask-panel h2,
+.result-panel h2 {
+  margin-top: 0;
+}
+
+textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  outline: none;
+}
+
+.option-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.option-row label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #374151;
+}
+
+.empty-result {
+  color: #6b7280;
+  padding: 40px;
+  text-align: center;
+}
+
+.answer-card {
+  padding: 18px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  margin-bottom: 16px;
+}
+
+.answer-card p {
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+/* 信息块 */
+
+.info-block {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.info-block h3 {
+  margin: 0 0 12px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px 16px;
+}
+
+.info-grid span {
+  color: #6b7280;
+}
+
+/* src/App.css */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 32%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  color: #0f172a;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+pre {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 登录页 */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 520px;
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #e5e7eb;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.login-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 850;
+  color: #0f172a;
+}
+
+.login-subtitle {
+  margin: 12px 0 0;
+  color: #64748b;
+  line-height: 1.7;
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.form-group input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  outline: none;
+  background: white;
+}
+
+.form-group input:focus,
+textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.primary-button {
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-radius: 14px;
+  background: #2563eb;
+  color: white;
+  font-weight: 800;
+}
+
+.primary-button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.error-box {
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.login-tip {
+  margin-top: 16px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* 极简聊天页 */
+
+.chat-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header {
+  height: 76px;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px);
+}
+
+.chat-header h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.chat-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.system-badge {
+  height: 34px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: white;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.dot.ok {
+  background: #059669;
+}
+
+.dot.bad {
+  background: #dc2626;
+}
+
+.ghost-button {
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid #dbe3ef;
+  border-radius: 999px;
+  background: white;
+  color: #334155;
+  font-weight: 700;
+}
+
+.ghost-button:hover {
+  background: #f8fafc;
+}
+
+.chat-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 24px 160px;
+}
+
+.message-list {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.message-row {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #1e293b;
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.message-row.user .message-avatar {
+  background: #2563eb;
+}
+
+.message-bubble {
+  max-width: min(760px, calc(100vw - 120px));
+  padding: 16px 18px;
+  border-radius: 18px;
+  line-height: 1.8;
+}
+
+.message-bubble.assistant {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.message-bubble.user {
+  background: #2563eb;
+  color: white;
+}
+
+.typing-line {
+  max-width: 960px;
+  margin: 0 auto 20px;
+  padding-left: 48px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  display: inline-block;
+  border-radius: 999px;
+  background: #2563eb;
+  animation: pulse 1s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.35;
+  }
+}
+
+/* 底部输入区 */
+
+.chat-input-area {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 24px 22px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0), #f8fafc 25%);
+}
+
+.example-row {
+  max-width: 960px;
+  margin: 0 auto 10px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.example-row button {
+  white-space: nowrap;
+  padding: 8px 12px;
+  border: 1px solid #dbe3ef;
+  border-radius: 999px;
+  background: white;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.input-box {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 12px;
+  border: 1px solid #dbe3ef;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.1);
+}
+
+.input-box textarea {
+  flex: 1;
+  min-height: 48px;
+  max-height: 160px;
+  padding: 12px 14px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #0f172a;
+}
+
+.input-box button {
+  width: 86px;
+  height: 44px;
+  border: none;
+  border-radius: 16px;
+  background: #2563eb;
+  color: white;
+  font-weight: 850;
+}
+
+.input-box button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+/* Markdown 渲染 */
+
+.markdown-body {
+  line-height: 1.8;
+}
+
+.markdown-body p {
+  margin: 0 0 12px;
+}
+
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body strong {
+  font-weight: 850;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 24px;
+  margin: 12px 0;
+}
+
+.markdown-body li {
+  margin: 6px 0;
+}
+
+.markdown-body table {
+  width: 100%;
+  margin: 14px 0;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: #dbeafe;
+  font-weight: 850;
+}
+
+.markdown-body code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #e5e7eb;
+  font-size: 13px;
+}
+
+.markdown-body pre {
+  padding: 14px;
+  border-radius: 10px;
+  background: #111827;
+  color: #f9fafb;
+  overflow-x: auto;
+}
+
+.message-bubble.user .markdown-body code {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* 折叠信息 */
+
+.message-extra {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.message-extra details {
+  margin-top: 8px;
+}
+
+.message-extra summary {
+  cursor: pointer;
+  color: #2563eb;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.source-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.source-card {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.source-title {
+  font-weight: 850;
+}
+
+.source-subtitle {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.source-card p {
+  margin: 8px 0 0;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.debug-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.debug-block {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.debug-block h4 {
+  margin: 0 0 8px;
+}
+
+.debug-block pre {
+  font-size: 12px;
+  color: #334155;
+}
+
+.muted {
+  color: #64748b;
+}
+
+/* 小屏适配 */
+
+@media (max-width: 760px) {
+  .chat-header {
+    height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+  }
+
+  .chat-main {
+    padding: 20px 12px 170px;
+  }
+
+  .message-bubble {
+    max-width: calc(100vw - 86px);
+  }
+
+  .chat-input-area {
+    padding: 12px;
+  }
+
+  .example-row {
+    padding-bottom: 4px;
+  }
+}

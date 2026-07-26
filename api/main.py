@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 import asyncio
 import logging
 
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,10 +33,50 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+
+
 # 日志初始化之后，再导入业务模块
 from api.dependencies import get_rag_chain
 from api.routes.auth import router as auth_router
 from api.routes.chat import router as chat_router
+
+
+load_dotenv()
+
+def get_env_list(name: str, default: str = "") -> list[str]:
+    """
+    从环境变量中读取逗号分隔的列表配置。
+
+    例如：
+    CORS_ALLOW_ORIGINS=http://localhost:3000,http://localhost:5173
+
+    会被解析成：
+    [
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
+    """
+
+    raw_value = os.getenv(name, default)
+
+    return [
+        item.strip()
+        for item in raw_value.split(",")
+        if item.strip()
+    ]
+
+
+def get_env_bool(name: str, default: bool = False) -> bool:
+    """
+    从环境变量中读取布尔值配置。
+    """
+
+    raw_value = os.getenv(name)
+
+    if raw_value is None:
+        return default
+
+    return raw_value.lower() == "true"
 
 
 @asynccontextmanager
@@ -119,8 +161,9 @@ app = FastAPI(
     openapi_tags=tags_metadata,
 )
 
-# 注册请求日志中间件
-app.add_middleware(RequestLoggingMiddleware)
+
+
+
 
 # 注册全局异常处理器
 app.add_exception_handler(
@@ -138,12 +181,16 @@ app.add_exception_handler(
 # 作用：允许后续前端页面从浏览器访问后端 API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ALLOW_ORIGINS,
-    allow_credentials=CORS_ALLOW_CREDENTIALS,
-    allow_methods=CORS_ALLOW_METHODS,
-    allow_headers=CORS_ALLOW_HEADERS,
+    allow_origins=[
+        "http://localhost:5173","http://127.0.0.1:5173",
+    ],
+    allow_credentials=get_env_bool("CORS_ALLOW_CREDENTIALS", True),
+    allow_methods=get_env_list("CORS_ALLOW_METHODS", "*"),
+    allow_headers=get_env_list("CORS_ALLOW_HEADERS", "*"),
 )
 
+# 注册请求日志中间件
+app.add_middleware(RequestLoggingMiddleware)
 
 @app.get(
     "/health",

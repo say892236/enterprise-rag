@@ -103,19 +103,23 @@ class ChatService:
         )
 
         # 5. 组装标准响应
+        # 只有 admin 可以查看 RAG 调试信息。
+        # 普通员工、HR、IT、Finance 等业务角色只返回业务答案和引用来源。
+        can_view_debug = current_user["role"] == "admin"
+
         response = ChatResponse(
             request_id=request_id,
             username=current_user["username"],
             user_id=current_user["user_id"],
             user_role=current_user["role"],
             question=result["question"],
-            rewritten_question=result.get("rewritten_question"),
+            rewritten_question=result.get("rewritten_question") if can_view_debug else None,
             answer=result["answer"],
             sources=sources,
             metadata_filter=effective_metadata_filter,
-            query_route=result.get("query_route"),
-            timings=result.get("timings"),
-            compression=result.get("compression"),
+            query_route=result.get("query_route") if can_view_debug else None,
+            timings=result.get("timings") if can_view_debug else None,
+            compression=result.get("compression") if can_view_debug else None,
             cost_time_seconds=cost_time,
         )
 
