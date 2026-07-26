@@ -48,13 +48,13 @@ class HybridRetriever:
 
     def __init__(
         self,
-        dense_retriever: MilvusRetriever(),
-        bm25_retriever: BM25Retriever,
+        dense_retriever: MilvusRetriever | None = None,
+        bm25_retriever: BM25Retriever | None = None,
         dense_top_k: int = 10,
         bm25_top_k: int = 10,
         final_top_k: int = 10,
-        dense_weight: float = 1.0,
-        bm25_weight: float = 1.0,
+        dense_weight: float = 0.6,
+        bm25_weight: float = 0.4,
         rrf_k: int = 60,
     ):
         """
@@ -86,10 +86,17 @@ class HybridRetriever:
             RRF 平滑系数。
             常见取值是 60。
             值越大，不同排名之间的分数差距越小。
+
+     注意：
+     这里不能在函数参数默认值里写 MilvusRetriever()。
+     否则 Python 在导入模块时就会提前连接 Milvus。
         """
 
-        self.dense_retriever = dense_retriever
-        self.bm25_retriever = bm25_retriever
+        # 如果外部传入了检索器，就使用外部传入的；
+        # 如果没有传入，就在真正创建 HybridRetriever 实例时再初始化。
+        # 注意：这样不会在 import hybrid_retriever.py 时提前连接 Milvus。
+        self.dense_retriever = dense_retriever or MilvusRetriever()
+        self.bm25_retriever = bm25_retriever or BM25Retriever()
 
         self.dense_top_k = dense_top_k
         self.bm25_top_k = bm25_top_k

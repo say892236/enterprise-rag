@@ -11,9 +11,11 @@ FastAPI 依赖管理模块。
 
 from functools import lru_cache
 
+from fastapi import Depends
+
 from chains.rag_chain import EnterpriseRAGChain
 from pipelines.rag_pipeline import build_hybrid_rag_chain
-
+from services.chat_service import ChatService
 
 @lru_cache(maxsize=1)
 def get_rag_chain() -> EnterpriseRAGChain:
@@ -32,3 +34,18 @@ def get_rag_chain() -> EnterpriseRAGChain:
     """
 
     return build_hybrid_rag_chain()
+
+def get_chat_service(
+    rag_chain: EnterpriseRAGChain = Depends(get_rag_chain),
+) -> ChatService:
+    """
+    获取 ChatService 实例。
+
+    注意：
+    - ChatService 本身很轻，只是业务编排层。
+    - 真正重的 RAG Chain 已经由 get_rag_chain() 做了 lru_cache 缓存。
+    """
+
+    return ChatService(
+        rag_chain=rag_chain,
+    )

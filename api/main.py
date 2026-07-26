@@ -1,12 +1,15 @@
 # api/main.py
 
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from api.routes.chat import router as chat_router
 
 from api.core.logging_config import setup_logging
 from api.core.request_logging import RequestLoggingMiddleware
@@ -38,19 +41,48 @@ from api.routes.chat import router as chat_router
 async def lifespan(app: FastAPI):
     """
     FastAPI 生命周期管理。
+
     启动时预加载 RAG Chain，避免第一次请求过慢。
+
+    注意：
+    Docker Compose 启动时，即使 Milvus 容器已经启动，
+    Milvus Proxy 也可能还没完全 ready。
+    所以这里增加重试，避免 API 因 Milvus 暂时不可用而启动失败。
     """
 
-    logger.info("正在预加载 RAG Chain...")
+    max_retry_count = 20
+    retry_interval_seconds = 5
 
-    get_rag_chain()
+    for attempt in range(1, max_retry_count + 1):
+        try:
+            logger.info(
+                "正在预加载 RAG Chain... attempt=%s/%s",
+                attempt,
+                max_retry_count,
+            )
 
-    logger.info("RAG Chain 预加载完成")
+            get_rag_chain()
+
+            logger.info("RAG Chain 预加载完成")
+            break
+
+        except Exception as e:
+            logger.warning(
+                "RAG Chain 预加载失败，等待后重试 | attempt=%s/%s | error=%s",
+                attempt,
+                max_retry_count,
+                str(e),
+            )
+
+            if attempt >= max_retry_count:
+                logger.exception("RAG Chain 预加载最终失败，API 启动中止")
+                raise
+
+            await asyncio.sleep(retry_interval_seconds)
 
     yield
 
     logger.info("FastAPI 服务关闭")
-
 
 tags_metadata = [
     {
