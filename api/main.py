@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import asyncio
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -160,6 +160,96 @@ def health_check():
         "status": "ok",
         "service": "enterprise-rag-api",
     }
+@app.get(
+    "/readiness",
+    tags=["Health"],
+    summary="就绪检查",
+    description="用于检查 RAG Chain、Retriever、向量库等核心依赖是否已准备好。",
+)
+def readiness_check():
+    """
+    就绪检查接口。
+
+    和 /health 的区别：
+    - /health 只说明 FastAPI 服务还活着。
+    - /readiness 会进一步检查 RAG Chain 是否已加载、Retriever 是否存在、向量库是否可访问。
+
+    适合用于：
+    1. Docker 部署后的服务可用性判断。
+    2. 后续 Nginx / K8s / 自动化测试的 readiness probe。
+    """
+
+    try:
+        # get_rag_chain() 已经由 lru_cache 缓存。
+        # 如果 lifespan 阶段已经预加载成功，这里不会重复加载大模型。
+        rag_chain = get_rag_chain()
+
+        retriever = getattr(
+            rag_chain,
+            "retriever",
+            None,
+        )
+
+        # HybridRetriever 里面一般有 dense_retriever。
+        # 如果不是 HybridRetriever，就退回使用 retriever 本身。
+        dense_retriever = getattr(
+            retriever,
+            "dense_retriever",
+            retriever,
+        )
+
+        vector_count = None
+        retrieval_smoke_test = "skipped"
+        retrieval_smoke_docs = 0
+
+        # 1. 尝试读取向量数量。
+        # 注意：不同 Milvus / LangChain 封装下 count() 不一定稳定，
+        # 所以 count 为 None 不代表服务不可用。
+        if dense_retriever is not None and hasattr(dense_retriever, "count"):
+            vector_count = dense_retriever.count()
+
+        # 2. 做一次轻量检索，用来确认向量库是否真的可访问。
+        # 这里只取 top_k=1，避免 readiness 检查成本过高。
+        if dense_retriever is not None and hasattr(dense_retriever, "retrieve"):
+            smoke_docs = dense_retriever.retrieve(
+                query="员工出差住宿标准",
+                top_k=1,
+                metadata_filter=None,
+            )
+
+            retrieval_smoke_docs = len(smoke_docs)
+            retrieval_smoke_test = "ready" if retrieval_smoke_docs > 0 else "empty"
+
+        return {
+            "status": "ready",
+            "service": "enterprise-rag-api",
+            "checks": {
+                "api": "ready",
+                "rag_chain": "ready",
+                "retriever": "ready" if retriever is not None else "missing",
+                "dense_retriever": "ready" if dense_retriever is not None else "missing",
+                "vector_count": vector_count,
+                "vector_count_status": "unknown" if vector_count is None else "ready",
+                "retrieval_smoke_test": retrieval_smoke_test,
+                "retrieval_smoke_docs": retrieval_smoke_docs,
+            },
+        }
+
+    except Exception as e:
+        logger.exception(
+            "Readiness 检查失败 | error=%s",
+            str(e),
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "success": False,
+                "error_code": "SERVICE_NOT_READY",
+                "message": "RAG 服务尚未准备好",
+                "error": str(e),
+            },
+        )
 
 app.include_router(auth_router)
 app.include_router(chat_router)

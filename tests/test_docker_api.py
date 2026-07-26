@@ -1,4 +1,5 @@
-# tests/test_docker_api.py
+
+3# tests/test_docker_api.py
 
 """
 Docker Compose 版 API 集成测试。
@@ -88,6 +89,65 @@ def test_health() -> None:
     )
 
     print_pass("/health 正常")
+
+
+def test_readiness() -> None:
+    """
+    测试 /readiness 就绪检查接口。
+
+    重点验证：
+    1. API 服务 ready。
+    2. RAG Chain 已加载。
+    3. Retriever 已加载。
+    4. 向量库可以通过轻量检索访问。
+    """
+
+    print_step("测试 /readiness")
+
+    response = requests.get(
+        f"{API_BASE_URL}/readiness",
+        timeout=30,
+    )
+
+    assert_true(
+        response.status_code == 200,
+        f"/readiness 状态码异常：{response.status_code}, body={response.text}",
+    )
+
+    data = get_json(response)
+    checks = data.get("checks", {})
+
+    assert_true(
+        data.get("status") == "ready",
+        f"/readiness status 异常：{data}",
+    )
+
+    assert_true(
+        checks.get("rag_chain") == "ready",
+        f"RAG Chain 未 ready：{data}",
+    )
+
+    assert_true(
+        checks.get("retriever") == "ready",
+        f"Retriever 未 ready：{data}",
+    )
+
+    assert_true(
+        checks.get("dense_retriever") == "ready",
+        f"Dense Retriever 未 ready：{data}",
+    )
+
+    assert_true(
+        checks.get("retrieval_smoke_test") == "ready",
+        f"向量库轻量检索未通过：{data}",
+    )
+
+    assert_true(
+        checks.get("retrieval_smoke_docs", 0) > 0,
+        f"向量库轻量检索没有返回文档：{data}",
+    )
+
+    print_pass("/readiness 正常")
 
 
 def login(username: str, password: str) -> str:
@@ -310,6 +370,7 @@ def run_all_tests() -> None:
     print("=" * 100)
 
     test_health()
+    test_readiness()
 
     token = test_login()
 
