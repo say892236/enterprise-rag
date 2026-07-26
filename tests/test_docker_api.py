@@ -123,6 +123,11 @@ def test_readiness() -> None:
     )
 
     assert_true(
+        checks.get("redis") == "ready",
+        f"Redis readiness 异常：{checks}",
+    )
+
+    assert_true(
         checks.get("rag_chain") == "ready",
         f"RAG Chain 未 ready：{data}",
     )
@@ -197,7 +202,7 @@ def test_login() -> str:
     print_step("测试 /auth/login")
 
     token = login(
-        username="ay",
+        username="say",
         password="123456",
     )
 

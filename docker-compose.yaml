@@ -30,6 +30,8 @@ services:
       # 如果你已经把模型缓存挂进来了，可以开启离线模式，避免容器启动时访问 HuggingFace
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      #Redis
+      REDIS_URL: redis://redis:6379/0
 
     volumes:
       # 开发阶段挂载整个项目代码，避免每次改 Python 文件都重新 build 镜像
@@ -39,6 +41,8 @@ services:
       - ${USERPROFILE}/.cache/huggingface:/root/.cache/huggingface
 
     depends_on:
+      redis:
+        condition: service_healthy
       milvus:
         condition: service_healthy
 
@@ -54,6 +58,21 @@ services:
       retries: 5
       start_period: 120s
 
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: enterprise-rag-redis
+    ports:
+      - "6379:6379"
+    command: [ "redis-server", "--appendonly", "yes" ]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 
@@ -152,3 +171,7 @@ services:
       - minio
 
     restart: unless-stopped
+
+
+volumes:
+  redis_data:

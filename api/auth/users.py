@@ -52,8 +52,8 @@ DEFAULT_PASSWORD_HASH = hash_password("123456")
 
 
 fake_users_db = {
-    "ay": {
-        "username": "ay",
+    "say": {
+        "username": "say",
         "hashed_password": DEFAULT_PASSWORD_HASH,
         "user_id": 10001,
         "role": "employee",

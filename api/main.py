@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from api.core.redis_client import ping_redis
 
 from api.routes.chat import router as chat_router
 
@@ -273,12 +274,14 @@ def readiness_check():
             "checks": {
                 "api": "ready",
                 "rag_chain": "ready",
+                "redis": "ready" if ping_redis() else "not_ready",
                 "retriever": "ready" if retriever is not None else "missing",
                 "dense_retriever": "ready" if dense_retriever is not None else "missing",
                 "vector_count": vector_count,
                 "vector_count_status": "unknown" if vector_count is None else "ready",
                 "retrieval_smoke_test": retrieval_smoke_test,
                 "retrieval_smoke_docs": retrieval_smoke_docs,
+
             },
         }
 

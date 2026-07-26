@@ -66,3 +66,6 @@ bcrypt==4.0.1
 
 pymilvus[milvus-lite]
 langchain-milvus
+
+#Redis
+redis

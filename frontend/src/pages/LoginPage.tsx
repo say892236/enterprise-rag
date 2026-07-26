@@ -3,8 +3,22 @@
 import { useState } from 'react'
 import { login } from '../api/client'
 
+
 interface LoginPageProps {
   onLoginSuccess: () => void
+}
+
+
+function inferRoleByUsername(username: string): string {
+  const roleMap: Record<string, string> = {
+    admin: 'admin',
+    hr: 'hr',
+    it: 'it',
+    finance: 'finance',
+    ay: 'employee',
+  }
+
+  return roleMap[username] || 'employee'
 }
 
 /**
@@ -14,7 +28,7 @@ interface LoginPageProps {
  * 登录成功后，将 access_token 保存到 localStorage。
  */
 export function LoginPage({ onLoginSuccess }: LoginPageProps) {
-  const [username, setUsername] = useState('ay')
+  const [username, setUsername] = useState('say')
   const [password, setPassword] = useState('123456')
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -24,26 +38,27 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
     setErrorMessage('')
 
     try {
-      const data = await login(username, password)
+  const loginResult = await login(username, password)
 
-      localStorage.setItem('access_token', data.access_token)
+if (!loginResult.access_token) {
+  throw new Error('后端未返回 access_token')
+}
 
-      if (data.username) {
-        localStorage.setItem('username', data.username)
-      }
+localStorage.setItem('token', loginResult.access_token)
+localStorage.setItem('username', loginResult.username || username)
+localStorage.setItem('role', loginResult.role || inferRoleByUsername(username))
 
-      if (data.role) {
-        localStorage.setItem('user_role', data.role)
-      }
+onLoginSuccess()
 
-      onLoginSuccess()
-    } catch (error) {
-      console.error(error)
-      setErrorMessage('登录失败，请检查用户名、密码或后端服务状态')
-    } finally {
-      setLoading(false)
+} catch (error) {
+  console.error(error)
+  setErrorMessage('登录失败，请检查用户名、密码或后端服务状态')
+} finally {
+  setLoading(false)
     }
   }
+
+
 
   return (
     <div className="login-page">
