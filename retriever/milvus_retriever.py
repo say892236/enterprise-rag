@@ -63,8 +63,7 @@ class MilvusRetriever:
         2. {"source": {"$in": ["a.md", "b.md"]}}
            -> source in ["a.md", "b.md"]
 
-        其他复杂过滤条件暂不支持，直接忽略。
-        权限控制层已经在 API 层提前处理，这里只负责向量库过滤。
+
         """
 
         if not metadata_filter:
@@ -98,6 +97,7 @@ class MilvusRetriever:
         query: str,
         top_k: int = 5,
         metadata_filter: Optional[Dict[str, Any]] = None,
+        user_role: Optional[str] = None,
     ) -> List[Document]:
         """
         执行 Milvus Dense 检索。

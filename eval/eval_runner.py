@@ -68,7 +68,7 @@ def print_result(index: int, total: int, result: dict):
             f"retrieval_sources={source.get('retrieval_sources')} | "
             f"hybrid_score={source.get('hybrid_score')} | "
             f"rerank_score={source.get('rerank_score')} | "
-            f"chroma_score={source.get('chroma_score')}"
+            f"dense_score={source.get('milvus_score') or source.get('score')}"
         )
 
     print()

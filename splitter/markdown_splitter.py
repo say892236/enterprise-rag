@@ -29,8 +29,8 @@ class MarkdownSplitter:
 
     def __init__(
         self,
-        chunk_size: int = 500,
-        chunk_overlap: int = 100,
+        chunk_size: int = 800,
+        chunk_overlap: int = 120,
     ) -> None:
         if chunk_size <= 0:
             raise ValueError("chunk_size 必须大于 0")
@@ -45,6 +45,7 @@ class MarkdownSplitter:
         self.header_splitter = MarkdownHeaderTextSplitter(
            # 遇到  # 标题，把标题内容放进 metadata["header_1"]
            # 遇到  ## 标题，把标题内容放进 metadata["header_2"]
+            # 遇到  ### 标题，把标题内容放进 metadata["header_3"]
             headers_to_split_on=[
                 ("#", "header_1"),
                 ("##", "header_2"),
@@ -118,7 +119,7 @@ class MarkdownSplitter:
         for chunk in chunks:
             #获取来源文件名，从 metadata 里取 source如果没有 source，就用 unknown
             source = str(
-                chunk.metadata.get("source", "unknown")
+                chunk.metadata.get("document_id", "unknown")
             )
             #如果第一次遇到 source = "travel_policy.md"，
             # source_counters.get("travel_policy.md", 0)
@@ -126,10 +127,15 @@ class MarkdownSplitter:
             #这个source已经处理了一个chunk下次再遇到它，序号就加1
             source_counters[source] = chunk_index + 1
 
+            document_id = chunk.metadata.get(
+                "document_id",
+                source
+            )
+
             chunk.metadata.update(
                 {
                     "chunk_index": chunk_index,  #表示这个 chunk 是当前源文件的第几个切片。
-                    "chunk_id": f"{source}:{chunk_index}",
+                    "chunk_id": f"{document_id}:{chunk_index}",
                     "char_count": len(chunk.page_content),  #记录当前 chunk 字符数,调试切片质量
                 }
             )

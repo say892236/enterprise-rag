@@ -8,18 +8,51 @@ interface LoginPageProps {
   onLoginSuccess: () => void
 }
 
+/**
+ * 后端写入 JWT 的用户身份数据。
+ */
+interface JwtPayload {
+  sub?: string
+  user_id?: string | number
+  role?: string
+  exp?: number
+}
 
-function inferRoleByUsername(username: string): string {
-  const roleMap: Record<string, string> = {
-    admin: 'admin',
-    hr: 'hr',
-    it: 'it',
-    finance: 'finance',
-    ay: 'employee',
+/**
+ * 解析 JWT Payload。
+ *
+ * 后端已经把 username、user_id 和 role 写入 Token，
+ * 前端直接使用 Token 中的真实角色，不再根据用户名猜测。
+ */
+function decodeJwtPayload(token: string): JwtPayload {
+  const payloadPart = token.split('.')[1]
+
+  if (!payloadPart) {
+    throw new Error('登录 Token 格式无效')
   }
 
-  return roleMap[username] || 'employee'
+  // JWT 使用 Base64URL，需要先转换成普通 Base64
+  const base64 = payloadPart
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+
+  // 补齐 Base64 末尾的等号
+  const paddedBase64 = base64.padEnd(
+    Math.ceil(base64.length / 4) * 4,
+    '=',
+  )
+
+  // 转成 UTF-8 字符串后解析 JSON
+  const bytes = Uint8Array.from(
+    atob(paddedBase64),
+    (char) => char.charCodeAt(0),
+  )
+
+  const jsonText = new TextDecoder().decode(bytes)
+
+  return JSON.parse(jsonText) as JwtPayload
 }
+
 
 /**
  * 登录页面。
@@ -44,9 +77,43 @@ if (!loginResult.access_token) {
   throw new Error('后端未返回 access_token')
 }
 
-localStorage.setItem('token', loginResult.access_token)
-localStorage.setItem('username', loginResult.username || username)
-localStorage.setItem('role', loginResult.role || inferRoleByUsername(username))
+// 从后端签发的 JWT 中读取真实身份和角色
+const tokenPayload = decodeJwtPayload(
+  loginResult.access_token,
+)
+
+const loginUsername =
+  loginResult.username
+  || tokenPayload.sub
+  || username
+
+const loginRole =
+  loginResult.role
+  || tokenPayload.role
+
+if (!loginRole) {
+  throw new Error('登录 Token 中缺少用户角色')
+}
+
+localStorage.setItem(
+  'token',
+  loginResult.access_token,
+)
+
+localStorage.setItem(
+  'username',
+  loginUsername,
+)
+
+localStorage.setItem(
+  'role',
+  loginRole,
+)
+
+// ===============================
+// 登录成功后创建新的聊天会话
+// 避免进入系统后直接加载上一次聊天
+// ===============================
 
 onLoginSuccess()
 

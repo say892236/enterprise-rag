@@ -45,53 +45,53 @@ def test_build_source_expr_exact_source() -> None:
     expr = MilvusRetriever._build_source_expr(
         self=None,
         metadata_filter={
-            "source": "travel_policy.md",
+            "source": "差旅住宿与交通标准.md"
         },
     )
 
-    assert expr == 'source == "travel_policy.md"'
+    assert expr == 'source == "差旅住宿与交通标准.md"'
 
-    print_pass("source 精确匹配 expr 正确")
-
+    print_pass(
+        "source 精确匹配 expr 正确"
+    )
 
 def test_build_source_expr_source_in() -> None:
-    """
-    测试 source.$in 匹配。
-    """
 
     expr = MilvusRetriever._build_source_expr(
         self=None,
         metadata_filter={
             "source": {
                 "$in": [
-                    "employee_handbook.md",
-                    "travel_policy.md",
+                    "员工手册.md",
+                    "差旅住宿与交通标准.md",
                 ]
             }
         },
     )
 
-    assert expr == 'source in ["employee_handbook.md", "travel_policy.md"]'
+    assert expr == (
+        'source in '
+        '["员工手册.md", "差旅住宿与交通标准.md"]'
+    )
 
-    print_pass("source.$in expr 正确")
+    print_pass(
+        "source.$in expr 正确"
+    )
 
-
-def test_build_source_expr_unsupported_filter() -> None:
-    """
-    测试暂不支持的过滤条件。
-    """
+def test_build_source_expr_unsupported_filter():
 
     expr = MilvusRetriever._build_source_expr(
         self=None,
         metadata_filter={
-            "header_2": "3. 住宿标准",
+            "unknown_field": "xxx"
         },
     )
 
     assert expr is None
 
-    print_pass("暂不支持的过滤条件返回 expr=None")
-
+    print_pass(
+        "暂不支持字段返回 expr=None"
+    )
 
 def run_all_tests() -> None:
     """

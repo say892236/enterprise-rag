@@ -9,7 +9,6 @@ RAG Pipeline 构建模块。
 3. 后续改模型、路径、top_k，只需要改 config/settings.py。
 """
 
-from retriever.chroma_retriever import ChromaRetriever
 from retriever.milvus_retriever import MilvusRetriever
 from retriever.bm25_retriever import BM25Retriever
 from retriever.hybrid_retriever import HybridRetriever
@@ -22,12 +21,11 @@ from config.settings import (
     ENABLE_CONFIDENCE_GUARD,
     CONFIDENCE_MIN_OVERLAP_COUNT,
     CONFIDENCE_CHECK_TOP_N,
-    VECTOR_DB
+
 )
 
 from config.settings import (
-    CHROMA_PERSIST_DIR,
-    CHROMA_COLLECTION_NAME,
+
     CHUNKS_FILE,
     EMBEDDING_MODEL_NAME,
     EMBEDDING_DEVICE,
@@ -48,11 +46,10 @@ from config.settings import (
 
 def build_dense_retriever():
     """
-    根据 VECTOR_DB 配置构建 Dense Retriever。
+    构建 Dense Retriever。
 
-    支持：
-    1. chroma：使用 ChromaRetriever
-    2. milvus：使用 MilvusRetriever
+
+    使用 MilvusRetriever
 
     注意：
     这里只切换 Dense Retriever。
@@ -62,18 +59,12 @@ def build_dense_retriever():
 
     print("=" * 100)
     print("正在构建 Dense Retriever")
-    print(f"当前 VECTOR_DB: {VECTOR_DB}")
     print("=" * 100)
 
-    if VECTOR_DB == "chroma":
-        return ChromaRetriever()
 
-    if VECTOR_DB == "milvus":
-        return MilvusRetriever()
+    return MilvusRetriever()
 
-    raise ValueError(
-        f"不支持的 VECTOR_DB 配置：{VECTOR_DB}，可选值：chroma / milvus"
-    )
+
 def build_bm25_retriever() -> BM25Retriever:
     """
     创建 BM25 Retriever。
@@ -170,7 +161,7 @@ def build_reranker_rag_chain() -> EnterpriseRAGChain:
     构建 Reranker RAG Chain。
 
     链路：
-    Chroma Retriever → Reranker → LLM
+    Milvus Retriever → Reranker → LLM
     """
 
     return EnterpriseRAGChain(
@@ -188,7 +179,7 @@ def build_rewrite_reranker_rag_chain() -> EnterpriseRAGChain:
     构建 Rewrite + Reranker RAG Chain。
 
     链路：
-    Query Rewrite → Chroma Retriever → Reranker → LLM
+    Query Rewrite → Milvus Retriever → Reranker → LLM
     """
 
     return EnterpriseRAGChain(

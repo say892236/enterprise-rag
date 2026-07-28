@@ -17,41 +17,52 @@ class ChatRequest(BaseModel):
     """
 
     # 禁止传入未定义字段
-    # 例如传了 unknown_field，会直接返回 422
+    # 例如传入 unknown_field 时，接口会直接返回 422
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
             "examples": [
-               # 正常公共文档问答
+                # 示例 1：正常访问公共文档
                 {
                     "question": "员工出差住宿标准是什么？",
+                    "session_id": "请先调用 /chat/session/new 获取",
                     "retrieve_top_k": 6,
                     "rerank_top_k": 3,
-                    "metadata_filter": {
-                        "source": "travel_policy.md"
-                    },
                     "enable_rewrite": True,
                     "enable_rerank": True,
+                    "enable_compression": True,
+                    "metadata_filter": {
+                        "source": "差旅住宿与交通标准.md",
+                    },
                 },
-                # 无答案问题拒答
+
+                # 示例 2：知识库无答案问题
                 {
                     "question": "公司食堂几点开门？",
+                    "session_id": "请先调用 /chat/session/new 获取",
                     "retrieve_top_k": 6,
                     "rerank_top_k": 3,
+                    "enable_rewrite": True,
+                    "enable_rerank": True,
+                    "enable_compression": True,
                     "metadata_filter": None,
-                    "enable_rewrite": True,
-                    "enable_rerank": True,
                 },
-               # 私有文档权限测试
+
+                # 示例 3：HR 私有文档权限测试
+                #
+                # employee 用户调用时应返回 PERMISSION_DENIED；
+                # hr 或 admin 用户调用时应正常访问。
                 {
-                    "question": "薪资调整流程是什么？",
+                    "question": "公司的薪资调整流程是什么？",
+                    "session_id": "请先调用 /chat/session/new 获取",
                     "retrieve_top_k": 6,
                     "rerank_top_k": 3,
-                    "metadata_filter": {
-                        "source": "hr_salary_policy.md"
-                    },
                     "enable_rewrite": True,
                     "enable_rerank": True,
+                    "enable_compression": True,
+                    "metadata_filter": {
+                        "source": "薪酬体系与调薪管理制度.md",
+                    },
                 },
             ]
         },
@@ -97,6 +108,10 @@ class ChatRequest(BaseModel):
     enable_compression: bool = Field(
         default=True,
         description="是否启用 Context Compression 上下文压缩",
+    )
+    session_id: str = Field(
+        default="default",
+        description="当前聊天会话 ID",
     )
 
     @field_validator("question")
@@ -158,7 +173,6 @@ class SourceItem(BaseModel):
 
         # Dense 检索分数
         score: Optional[float] = None
-        chroma_score: Optional[float] = None
         milvus_score: Optional[float] = None
         dense_rank: Optional[int] = None
         dense_rrf_score: Optional[float] = None

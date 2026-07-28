@@ -1,437 +1,444 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import "../assets/markdown.css";
 
-import { askQuestion } from '../api/client'
-import type { ChatResponse, SourceItem } from '../types/api'
+import {
+  askQuestionStream,
+  createSession,
+  deleteSession,
+  getSessionMessages,
+  getSessions,
+} from '../api/client'
+
+import type {
+  ChatResponse,
+  ChatStreamStage,
+  RedisChatMessage,
+  RedisSession,
+  SourceItem,
+} from '../types/api'
 
 type ChatPageProps = {
   onLogout: () => void
 }
 
-/**
- * 单条聊天消息。
- *
- * role:
- * - user：用户消息
- * - assistant：AI 回复
- *
- * response:
- * - 只有 assistant 消息才可能携带后端完整响应
- * - 用于展示引用来源、调试信息等
- */
 type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
   response?: ChatResponse
+  loading?: boolean
 }
 
-/**
- * 一个前端会话。
- *
- * 当前阶段：
- * - 会话只保存在浏览器 localStorage
- * - 刷新页面后历史会话仍然存在
- *
- * 注意：
- * - 这还不是后端多轮记忆
- * - 后端暂时仍然是单轮 RAG 问答
- */
-type ChatSession = {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  updatedAt: number
+
+
+function toChatMessages(historyMessages: RedisChatMessage[]): ChatMessage[] {
+  return historyMessages.map(({ role, content }) => ({ role, content }))
 }
 
-const CHAT_SESSIONS_STORAGE_KEY = 'enterprise_rag_chat_sessions'
-
-/**
- * 默认欢迎语。
- *
- * 每个新会话都会从这条助手消息开始。
- */
-function createInitialMessages(): ChatMessage[] {
-  return [
-    {
-      role: 'assistant',
-      content:
-        '你好，我是企业知识库问答助手。你可以询问公司概览、差旅、报销、请假、员工手册、IT 安全和权限合规相关问题。',
-    },
-  ]
-}
-
-/**
- * 创建一个前端会话 ID。
- *
- * 当前阶段使用前端生成的 session_id。
- * 后续如果接入后端多轮记忆，可以直接把这个 ID 传给后端。
- */
-function createSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(16).slice(2)}`
-}
-
-/**
- * 创建一个新会话。
- */
-function createNewSession(): ChatSession {
-  return {
-    id: createSessionId(),
-    title: '新聊天',
-    messages: createInitialMessages(),
-    updatedAt: Date.now(),
-  }
-}
-
-/**
- * 从 localStorage 读取历史会话。
- *
- * 如果没有历史记录，自动创建一个默认新会话。
- */
-function loadChatSessions(): ChatSession[] {
-  const rawValue = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY)
-
-  if (!rawValue) {
-    return [createNewSession()]
-  }
-
-  try {
-    const parsedSessions = JSON.parse(rawValue) as ChatSession[]
-
-    if (!Array.isArray(parsedSessions) || parsedSessions.length === 0) {
-      return [createNewSession()]
-    }
-
-    return parsedSessions
-  } catch {
-    return [createNewSession()]
-  }
-}
-
-/**
- * 保存历史会话到 localStorage。
- */
-function saveChatSessions(sessions: ChatSession[]) {
-  localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(sessions))
-}
-
-/**
- * 初始化聊天状态。
- *
- * 这里统一加载一次 sessions，避免 useState 分别初始化时生成两个不同的新会话。
- */
-function loadInitialChatState() {
-  const sessions = loadChatSessions()
-
-  return {
-    sessions,
-    activeSessionId: sessions[0].id,
-  }
-}
-
-/**
- * 根据用户第一次提问生成会话标题。
- *
- * 例如：
- * - 员工出差住宿标准是什么？
- * - 我们公司名字叫什么？
- */
-function buildSessionTitle(question: string): string {
-  const cleanQuestion = question.trim()
-
-  if (!cleanQuestion) {
-    return '新聊天'
-  }
-
-  return cleanQuestion.length > 18 ? `${cleanQuestion.slice(0, 18)}...` : cleanQuestion
-}
-
-/**
- * 打字机效果用的延迟函数。
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
-}
-
-/**
- * 聊天主页面。
- *
- * 页面结构：
- * - 左侧：新聊天 + 历史会话列表
- * - 右侧：当前会话内容 + 输入框
- * - 右上角：当前用户信息 + 退出
- */
 export function ChatPage({ onLogout }: ChatPageProps) {
-  /**
-   * 只在首次渲染时读取 localStorage。
-   */
-  const initialChatStateRef = useRef<ReturnType<typeof loadInitialChatState> | null>(null)
-
-  if (initialChatStateRef.current === null) {
-    initialChatStateRef.current = loadInitialChatState()
-  }
-
-  /**
-   * 所有前端历史会话。
-   */
-  const [sessions, setSessions] = useState<ChatSession[]>(
-    initialChatStateRef.current.sessions,
-  )
-
-  /**
-   * 当前正在查看的会话 ID。
-   */
-  const [activeSessionId, setActiveSessionId] = useState<string>(
-    initialChatStateRef.current.activeSessionId,
-  )
-
-  /**
-   * 输入框内容。
-   */
+  const [sessions, setSessions] = useState<RedisSession[]>([])
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [question, setQuestion] = useState('')
+const [asking, setAsking] = useState(false)
 
-  /**
-   * 请求状态。
-   */
-  const [asking, setAsking] = useState(false)
+// 当前后端真实执行阶段：检索或生成
+const [streamStage, setStreamStage] = useState<ChatStreamStage | null>(null)
 
-  /**
-   * 页面错误提示。
-   */
-  const [errorMessage, setErrorMessage] = useState('')
+const [errorMessage, setErrorMessage] = useState('')
 
-  /**
-   * 消息列表底部锚点，用于自动滚动到底部。
-   */
+
+  const showExampleQuestions =
+  messages.length === 0
+  && sessionId === null
+  && !asking
+
+
   const messageEndRef = useRef<HTMLDivElement | null>(null)
+  const currentSessionIdRef = useRef<string | null>(null)
+  const initialisedRef = useRef(false)
+  const sessionLoadVersionRef = useRef(0)
 
-  /**
-   * 当前激活的会话。
-   */
-  const activeSession = sessions.find((session) => session.id === activeSessionId)
 
-  /**
-   * 当前会话的消息列表。
-   */
-  const messages = activeSession?.messages || createInitialMessages()
-
-  /**
-   * 当消息变化时，自动滚动到底部。
-   */
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({
-      behavior: 'smooth',
+      // Keep pace with the typewriter updates; smooth scrolling is used once
+      // the response is complete (and for session/history changes).
+      behavior: asking ? 'auto' : 'smooth',
       block: 'end',
     })
-  }, [messages])
+  }, [asking, messages, sessionId])
 
-  /**
-   * 更新指定会话的消息。
-   *
-   * 这里不直接 setMessages，因为现在消息属于某个 session。
-   */
-  function updateSessionMessages(
-    sessionId: string,
-    nextMessages: ChatMessage[],
-    nextTitle?: string,
-  ) {
-    setSessions((prevSessions) => {
-      const nextSessions = prevSessions.map((session) => {
-        if (session.id !== sessionId) {
-          return session
+
+
+const handleRequestError = useCallback(
+  (
+    error: unknown,
+    fallbackMessage: string,
+  ): void => {
+    console.error(error)
+
+    // 同时兼容 Axios 错误和 fetch 流式请求错误
+    const status =
+      (
+        error as {
+          response?: {
+            status?: number
+          }
+          status?: number
         }
-
-        return {
-          ...session,
-          title: nextTitle || session.title,
-          messages: nextMessages,
-          updatedAt: Date.now(),
+      ).response?.status
+      ?? (
+        error as {
+          status?: number
         }
-      })
+      ).status
 
-      /**
-       * 最近更新的会话排在最上面。
-       */
-      const sortedSessions = [...nextSessions].sort((a, b) => b.updatedAt - a.updatedAt)
+    if (status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('username')
+      localStorage.removeItem('role')
 
-      saveChatSessions(sortedSessions)
-
-      return sortedSessions
-    })
-  }
-
-  /**
-   * 新建会话。
-   */
-  function handleNewChat() {
-    const newSession = createNewSession()
-
-    setSessions((prevSessions) => {
-      const nextSessions = [newSession, ...prevSessions]
-      saveChatSessions(nextSessions)
-      return nextSessions
-    })
-
-    setActiveSessionId(newSession.id)
-    setQuestion('')
-    setErrorMessage('')
-  }
-
-  /**
-   * 切换左侧历史会话。
-   */
-  function handleSelectSession(sessionId: string) {
-    setActiveSessionId(sessionId)
-    setQuestion('')
-    setErrorMessage('')
-  }
-
-  /**
-   * 发送问题到后端。
-   *
-   * 当前阶段：
-   * - 前端保存会话历史
-   * - 每次请求后端仍然只发送当前 question
-   *
-   * 后续做真正多轮记忆时，可以在 ChatRequest 中增加 session_id。
-   */
-  async function handleAsk() {
-    const cleanQuestion = question.trim()
-
-    if (!cleanQuestion || asking) {
+      setErrorMessage('登录已失效，请重新登录')
+      onLogout()
       return
     }
 
-    const currentSessionId = activeSessionId
-    const currentSession = sessions.find((session) => session.id === currentSessionId)
-    const currentMessages = currentSession?.messages || createInitialMessages()
+    // SSE 抛出的错误通常包含后端的具体错误消息
+    const errorText =
+      error instanceof Error
+        ? error.message
+        : ''
 
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: cleanQuestion,
+    setErrorMessage(
+      errorText && !errorText.startsWith('Request failed')
+        ? errorText
+        : fallbackMessage,
+    )
+  },
+  [onLogout],
+)
+
+  const loadSessions = useCallback(async (): Promise<void> => {
+    const result = await getSessions()
+
+    if (!result.success) {
+      throw new Error('加载聊天历史失败')
     }
 
-    const nextMessages = [...currentMessages, userMessage]
+    setSessions(result.sessions)
+  }, [])
 
-    /**
-     * 如果当前会话还是“新聊天”，用用户第一句话生成标题。
-     */
-    const nextTitle =
-      currentSession?.title === '新聊天' ? buildSessionTitle(cleanQuestion) : undefined
+  useEffect(() => {
+    if (initialisedRef.current) {
+      return
+    }
 
-    updateSessionMessages(currentSessionId, nextMessages, nextTitle)
+    initialisedRef.current = true
 
+    void loadSessions().catch((error: unknown) => {
+      handleRequestError(error, '加载聊天历史失败，请稍后重试')
+    })
+  }, [handleRequestError, loadSessions])
+
+  function handleNewChat(): void {
+    sessionLoadVersionRef.current += 1
+    currentSessionIdRef.current = null
+    setSessionId(null)
+    setMessages([])
     setQuestion('')
     setErrorMessage('')
-    setAsking(true)
+  }
+
+  async function handleSelectSession(nextSessionId: string): Promise<void> {
+    if (asking || nextSessionId === sessionId) {
+      return
+    }
+
+    const loadVersion = sessionLoadVersionRef.current + 1
+    sessionLoadVersionRef.current = loadVersion
+    currentSessionIdRef.current = nextSessionId
+    setSessionId(nextSessionId)
+    setMessages([])
+    setQuestion('')
+    setErrorMessage('')
 
     try {
-      const response = await askQuestion({
+      const result = await getSessionMessages(nextSessionId)
+
+      if (!result.success) {
+        throw new Error('加载聊天记录失败')
+      }
+
+      if (
+        currentSessionIdRef.current === nextSessionId &&
+        sessionLoadVersionRef.current === loadVersion
+      ) {
+        setMessages(toChatMessages(result.messages))
+      }
+    } catch (error) {
+      if (currentSessionIdRef.current === nextSessionId) {
+        handleRequestError(error, '加载聊天记录失败，请稍后重试')
+      }
+    }
+  }
+
+  async function handleDeleteSession(targetSessionId: string): Promise<void> {
+    if (asking || !window.confirm('确定删除这个聊天吗？')) {
+      return
+    }
+
+    try {
+      const result = await deleteSession(targetSessionId)
+
+      if (!result.success) {
+        throw new Error('删除失败')
+      }
+
+      if (targetSessionId === currentSessionIdRef.current) {
+        sessionLoadVersionRef.current += 1
+        currentSessionIdRef.current = null
+        setSessionId(null)
+        setMessages([])
+        setQuestion('')
+        setErrorMessage('')
+      }
+
+      await loadSessions()
+    } catch (error) {
+      handleRequestError(error, '删除失败')
+    }
+  }
+
+  /**
+ * 更新消息列表最后一条 AI 消息。
+ *
+ * 本次流式回答期间，最后一条消息始终是正在生成的 AI 消息。
+ * status 和 token 事件都会通过这个方法更新它。
+ */
+function updateLastAssistantMessage(
+  targetSessionId: string,
+  updater: (message: ChatMessage) => ChatMessage,
+): void {
+  // 用户已经切换会话时，忽略旧请求返回的数据
+  if (currentSessionIdRef.current !== targetSessionId) {
+    return
+  }
+
+  setMessages((currentMessages) => {
+    const lastIndex = currentMessages.length - 1
+    const lastMessage = currentMessages[lastIndex]
+
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+      return currentMessages
+    }
+
+    const nextMessages = [...currentMessages]
+    nextMessages[lastIndex] = updater(lastMessage)
+
+    return nextMessages
+  })
+}
+
+  async function handleAsk(): Promise<void> {
+  const cleanQuestion = question.trim()
+
+  if (!cleanQuestion || asking) {
+    return
+  }
+
+  let targetSessionId = sessionId
+
+  setQuestion('')
+  setErrorMessage('')
+  setStreamStage('retrieving')
+  setAsking(true)
+
+  try {
+    // 当前没有会话时，先创建新的 Redis 会话
+    if (!targetSessionId) {
+      const result = await createSession()
+
+      if (!result.success || !result.session_id) {
+        throw new Error('创建聊天失败')
+      }
+
+      targetSessionId = result.session_id
+      currentSessionIdRef.current = targetSessionId
+      setSessionId(targetSessionId)
+    }
+
+    if (!targetSessionId) {
+      throw new Error('未能获取聊天会话 ID')
+    }
+    // 加在这里：经过上面的判断后，它一定是 string
+const activeSessionId = targetSessionId
+
+    /*
+     * 立即插入两条消息：
+     * 1. 用户问题
+     * 2. AI 占位消息
+     *
+     * 后续 status 和 token 事件都会持续更新这条 AI 消息。
+     */
+    setMessages([
+      ...messages,
+      {
+        role: 'user',
+        content: cleanQuestion,
+      },
+      {
+        role: 'assistant',
+        content: '正在检索知识库...',
+        loading: true,
+      },
+    ])
+
+    const response = await askQuestionStream(
+      {
         question: cleanQuestion,
+        session_id: targetSessionId,
         retrieve_top_k: 5,
         rerank_top_k: 5,
         enable_rewrite: true,
         enable_rerank: true,
         enable_compression: true,
-      })
-
-      await typeAssistantAnswer(
-        currentSessionId,
-        nextMessages,
-        response.answer,
-        response,
-      )
-    }  catch (error) {
-  console.error(error)
-
-  /**
-   * Axios 请求失败时，401 表示登录态失效。
-   * 这里不继续留在聊天页，而是清理登录信息并回到登录页。
-   */
-  const status = (error as { response?: { status?: number } }).response?.status
-
-  if (status === 401) {
-    localStorage.removeItem('token')
-    localStorage.removeItem('username')
-    localStorage.removeItem('role')
-
-    setErrorMessage('登录已失效，请重新登录')
-    onLogout()
-    return
-  }
-
-  const errorAssistantMessage: ChatMessage = {
-    role: 'assistant',
-    content: '请求失败，请检查后端服务状态或稍后重试。',
-  }
-
-  updateSessionMessages(currentSessionId, [...nextMessages, errorAssistantMessage])
-  setErrorMessage('请求失败，请检查后端服务状态或稍后重试')
-}finally {
-      setAsking(false)
-    }
-  }
-
-  /**
-   * 前端打字机效果。
-   *
-   * 注意：
-   * - 这不是真正的后端流式输出
-   * - 后端完整回答返回后，前端逐字显示
-   */
-  async function typeAssistantAnswer(
-    sessionId: string,
-    baseMessages: ChatMessage[],
-    answer: string,
-    response: ChatResponse,
-  ) {
-    let currentText = ''
-
-    /**
-     * 先插入一条空的 assistant 消息。
-     */
-    updateSessionMessages(sessionId, [
-      ...baseMessages,
-      {
-        role: 'assistant',
-        content: '',
-        response,
+        metadata_filter: null,
       },
-    ])
 
-    for (let index = 0; index < answer.length; index += 1) {
-      currentText += answer[index]
 
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: currentText,
-        response,
+
+      {
+
+        /**
+         * 后端状态事件：
+         * retrieving -> generating
+         */
+        onStatus: (data) => {
+          setStreamStage(data.stage)
+
+          updateLastAssistantMessage(
+    activeSessionId,
+    (message) => {
+      if (!message.loading) {
+        return message
       }
 
-      updateSessionMessages(sessionId, [...baseMessages, assistantMessage])
+      return {
+        ...message,
+        content: data.message,
+        loading: true,
+      }
+    },
+  )
+},
 
-      await sleep(12)
+        /**
+         * 后端大模型增量文本。
+         */
+        onToken: (data) => {
+          updateLastAssistantMessage(
+            activeSessionId,
+            (message) => {
+              /*
+               * 第一个 token 到达时：
+               * 清除“正在生成结果...”状态文字。
+               *
+               * 后续 token 到达时：
+               * 继续追加到已有回答。
+               */
+              const currentContent = message.loading
+                ? ''
+                : message.content
+
+              return {
+                ...message,
+                content: currentContent + data.content,
+                loading: false,
+              }
+            },
+          )
+        },
+
+        /**
+         * SSE 业务错误。
+         *
+         * askQuestionStream 随后还会抛出异常，
+         * 最终由 catch 统一处理。
+         */
+        onError: (data) => {
+          setErrorMessage(data.message)
+        },
+      },
+    )
+
+    /*
+     * done 事件已经到达。
+     *
+     * 使用后端返回的完整答案校正最终文本，
+     * 并挂载 sources、耗时和管理员调试信息。
+     */
+    updateLastAssistantMessage(
+      targetSessionId,
+      (message) => ({
+        ...message,
+        content: response.answer,
+        response,
+        loading: false,
+      }),
+    )
+
+    // 第一轮问答完成后，后端可能已经更新会话标题
+    await loadSessions()
+  } catch (error) {
+    if (targetSessionId) {
+      updateLastAssistantMessage(
+        targetSessionId,
+        (message) => {
+          /*
+           * 尚未收到任何 token：
+           * 将状态占位文字替换为失败提示。
+           *
+           * 已收到部分 token：
+           * 保留已生成内容，并标记生成中断。
+           */
+          if (message.loading) {
+            return {
+              ...message,
+              content: '回答生成失败，请稍后重试。',
+              loading: false,
+            }
+          }
+
+          return {
+            ...message,
+            content: `${message.content}\n\n> 回答生成中断，请稍后重试。`,
+            loading: false,
+          }
+        },
+      )
     }
-  }
 
-  /**
-   * 输入框快捷键：
-   * - Enter：发送
-   * - Shift + Enter：换行
-   */
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    handleRequestError(
+      error,
+      '请求失败，请检查后端服务状态或稍后重试',
+    )
+  } finally {
+    setAsking(false)
+    setStreamStage(null)
+  }
+}
+
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      handleAsk()
+      void handleAsk()
     }
   }
 
-  /**
-   * 点击示例问题时，填入输入框。
-   */
-  function handleExampleClick(exampleQuestion: string) {
+  function handleExampleClick(exampleQuestion: string): void {
     setQuestion(exampleQuestion)
   }
 
@@ -441,27 +448,38 @@ export function ChatPage({ onLogout }: ChatPageProps) {
         <button
           type="button"
           className="sidebar-new-chat-button"
-          onClick={handleNewChat}
+          onClick={() => void handleNewChat()}
+          disabled={asking}
         >
-          ＋ 新聊天
+          + 新聊天
         </button>
 
         <div className="sidebar-section-title">最近</div>
 
         <div className="session-list">
-          {sessions.map((session) => (
+          {sessions.length === 0 ? (
+
+<div className="empty-history">
+    暂无历史消息
+</div>
+
+) : (
+            sessions.map((session) => (
             <button
-              key={session.id}
+              key={session.session_id}
               type="button"
-              className={
-                session.id === activeSessionId ? 'session-item active' : 'session-item'
-              }
-              onClick={() => handleSelectSession(session.id)}
+              className={session.session_id === sessionId ? 'session-item active' : 'session-item'}
+              onClick={() => void handleSelectSession(session.session_id)}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                void handleDeleteSession(session.session_id)
+              }}
               title={session.title}
             >
               {session.title}
             </button>
-          ))}
+            )))
+          }
         </div>
       </aside>
 
@@ -483,76 +501,76 @@ export function ChatPage({ onLogout }: ChatPageProps) {
 
         <main className="chat-main">
           <div className="message-list">
-            {messages.map((message, index) => (
-              <MessageBubble key={`${activeSessionId}-${index}`} message={message} />
-            ))}
+           {
+          messages.length === 0 ? (
 
-            {asking && messages[messages.length - 1]?.role === 'user' && (
-              <MessageBubble
-                message={{
-                  role: 'assistant',
-                  content: '正在查询知识库...',
-                }}
+           <div className="empty-chat">
+               👋 你好，我是企业知识库问答助手
+你可以咨询：公司概览、差旅、报销、请假、员工手册、IT安全权限、合规相关问题
+                 </div>
+              ) : (
+                  messages.map((message,index)=>(
+             <MessageBubble
+             key={`${index}`}
+               message={message}
               />
-            )}
+))
+)
+}
 
-            <div ref={messageEndRef} />
+
+            <div ref={messageEndRef} className="messages-end-anchor" />
           </div>
         </main>
 
         <section className="chat-input-area">
           {errorMessage && <div className="error-message">{errorMessage}</div>}
 
-          <div className="example-row">
-            <button
-              type="button"
-              onClick={() => handleExampleClick('员工出差住宿标准是什么？')}
-            >
-              差旅住宿标准
-            </button>
+          {showExampleQuestions && (
+  <div className="example-row">
+    <button
+      type="button"
+      onClick={() => handleExampleClick('员工出差住宿标准是什么？')}
+    >
+      差旅住宿标准
+    </button>
 
-            <button type="button" onClick={() => handleExampleClick('报销多久内提交？')}>
-              报销提交时限
-            </button>
+    <button
+      type="button"
+      onClick={() => handleExampleClick('报销需要在多久内提交？')}
+    >
+      报销提交时限
+    </button>
 
-            <button
-              type="button"
-              onClick={() => handleExampleClick('出差可以住五星级酒店吗？')}
-            >
-              五星级酒店
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleExampleClick('我们公司名字叫什么？')}
-            >
-              公司名称
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleExampleClick('公司食堂几点开门？')}
-            >
-              无答案测试
-            </button>
-          </div>
+    <button
+      type="button"
+      onClick={() => handleExampleClick('员工请假需要经过哪些流程？')}
+    >
+      员工请假流程
+    </button>
+  </div>
+)}
 
           <div className="input-box">
             <textarea
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="输入你的问题，按 Enter 发送，Shift + Enter 换行"
+              placeholder="输入问题 | Enter发送，Shift+Enter换行"
               disabled={asking}
             />
 
             <button
               type="button"
               className="send-button"
-              onClick={handleAsk}
+              onClick={() => void handleAsk()}
               disabled={asking || !question.trim()}
             >
-              {asking ? '生成中' : '发送'}
+              {!asking
+             ? '发送'
+           : streamStage === 'retrieving'
+          ? '检索中...'
+            : '生成中...'}
             </button>
           </div>
         </section>
@@ -561,23 +579,24 @@ export function ChatPage({ onLogout }: ChatPageProps) {
   )
 }
 
-/**
- * 当前登录用户信息。
- *
- * username / role 来自登录成功后写入的 localStorage。
- */
 function UserBadge() {
   const username = localStorage.getItem('username') || 'unknown'
   const role = localStorage.getItem('role') || 'employee'
 
   const roleTextMap: Record<string, string> = {
-    admin: '管理员',
-    employee: '普通员工',
-    hr: 'HR',
-    it: 'IT',
-    finance: '财务',
-    manager: '经理',
-  }
+  admin: '系统管理员',
+  employee: '普通员工',
+  hr: '人力资源',
+  finance: '财务',
+  engineering: '研发',
+  administration: '行政',
+  legal: '法务',
+  management: '管理层',
+
+  // 兼容之前可能签发的旧 Token
+  it: 'IT',
+  manager: '经理',
+}
 
   const roleText = roleTextMap[role] || role
   const avatarText = username.slice(0, 1).toUpperCase()
@@ -598,9 +617,6 @@ type MessageBubbleProps = {
   message: ChatMessage
 }
 
-/**
- * 单条消息气泡。
- */
 function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
@@ -611,7 +627,15 @@ function MessageBubble({ message }: MessageBubbleProps) {
       <div className="message-content">
         <div className="message-bubble">
           <div className="markdown-body">
+            {message.loading ? (
+   <div className="loading-text">
+      {message.content}
+   </div>
+ )
+ :
+ (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+ )}
           </div>
         </div>
 
@@ -625,22 +649,14 @@ type MessageExtraProps = {
   response: ChatResponse
 }
 
-/**
- * 消息附加信息。
- *
- * 普通用户：
- * - 只显示引用来源
- *
- * admin：
- * - 显示引用来源
- * - 显示调试信息
- *
- * 无答案场景：
- * - sources = []
- * - 不展示引用来源和调试信息
- */
 function MessageExtra({ response }: MessageExtraProps) {
-  const hasSources = response.sources.length > 0
+  const [showSources, setShowSources] = useState(false)
+
+  // 管理员最多查看 5 条，普通用户最多查看 3 条
+  const sourceLimit = response.user_role === 'admin' ? 5 : 3
+
+  const visibleSources = response.sources.slice(0, sourceLimit)
+  const hasSources = visibleSources.length > 0
   const canViewDebug = response.user_role === 'admin'
 
   if (!hasSources) {
@@ -648,17 +664,31 @@ function MessageExtra({ response }: MessageExtraProps) {
   }
 
   return (
-    <div className="message-extra">
-      <details>
-        <summary>引用来源（{response.sources.length}）</summary>
-        <SourceList sources={response.sources} />
-      </details>
+  <div className="message-extra">
 
+   <div
+  className="source-title-bar"
+  onClick={() => setShowSources(!showSources)}
+>
+
+  📚 参考依据（{visibleSources.length}）
+
+  <span className="source-toggle">
+    {showSources ? '收起' : '展开'}
+  </span>
+
+</div>
+
+
+{showSources && (
+  <SourceList sources={visibleSources} />
+)}
       {canViewDebug && (
-        <details>
-          <summary>调试信息</summary>
+         <>
+      <details>
+      <summary>调试信息</summary>
 
-          <div className="debug-grid">
+        <div className="debug-grid">
             <DebugBlock title="请求信息">
               <pre>
                 {JSON.stringify(
@@ -688,6 +718,13 @@ function MessageExtra({ response }: MessageExtraProps) {
             </DebugBlock>
           </div>
         </details>
+      <details>
+  <summary>
+    Reranker排序
+  </summary>
+  <RerankDebug sources={response.sources}/>
+</details>
+      </>
       )}
     </div>
   )
@@ -698,27 +735,111 @@ type SourceListProps = {
 }
 
 /**
- * 引用来源列表。
+ * 格式化参考依据名称。
+ *
+ * 作用：
+ * 1. 去掉文件路径。
+ * 2. 去掉 Markdown 的 .md 后缀。
+ * 3. 清理首尾空白。
  */
+function formatSourceName(sourceName?: string): string {
+  if (!sourceName) {
+    return '未知来源'
+  }
+
+  // 同时兼容 Windows 和 Linux 路径
+  const fileName = sourceName
+    .split(/[\\/]/)
+    .pop()
+    ?.trim()
+
+  return (fileName || '未知来源')
+    .replace(/\.md$/i, '')
+    .trim()
+}
+
+
+/**
+ * 清理引用片段中的 Markdown 标记。
+ *
+ * 这里只用于参考依据预览，不修改真正交给模型的知识库内容。
+ */
+function cleanSourcePreview(content?: string): string {
+  if (!content) {
+    return ''
+  }
+
+  return content
+    // 删除出现在行首或空白后的 Markdown 标题符号
+    .replace(/(^|\s)#{1,6}\s*/g, '$1')
+
+    // 删除加粗、斜体和行内代码符号
+    .replace(/[*_`]/g, '')
+
+    // 删除引用符号
+    .replace(/(^|\s)>\s*/g, '$1')
+
+    // 表格竖线转换为空格
+    .replace(/\|/g, ' ')
+
+    // 合并连续空白
+    .replace(/\s+/g, ' ')
+
+    .trim()
+}
+
 function SourceList({ sources }: SourceListProps) {
   return (
     <div className="source-list">
       {sources.map((source, index) => {
-        const sourceTitle = source.source || source.file_path || '未知来源'
-        const sourceLocation = [source.header_1, source.header_2]
-          .filter(Boolean)
-          .join(' / ')
+        /*
+         * 展示标题优先级：
+         * 1. Markdown 一级标题 header_1
+         * 2. 原始文件名 source
+         * 3. 文件路径 file_path
+         *
+         * 无论使用哪个字段，都统一去掉 .md 后缀。
+         */
+        const sourceTitle = formatSourceName(
+          source.header_1
+          || source.source
+          || source.file_path,
+        )
+
+        /*
+         * 一级标题已经作为文档名称展示，
+         * 所以这里不再重复显示 header_1，
+         * 只显示具体章节 header_2。
+         */
+        const sourceLocation = cleanSourcePreview(
+          source.header_2,
+        )
+
+        const preview = cleanSourcePreview(
+          source.content_preview
+          || source.content
+          || source.page_content,
+        )
 
         return (
-          <div key={source.chunk_id || `${sourceTitle}-${index}`} className="source-card">
-            <div className="source-title">{sourceTitle}</div>
+          <div
+            key={source.chunk_id || index}
+            className="source-card"
+          >
+            <div className="source-file">
+              📄 {sourceTitle}
+            </div>
 
-            {sourceLocation && <div className="source-meta">{sourceLocation}</div>}
+            {sourceLocation && (
+              <div className="source-location">
+                📌 {sourceLocation}
+              </div>
+            )}
 
-            {source.chunk_id && <div className="source-meta">chunk_id：{source.chunk_id}</div>}
-
-            {source.content_preview && (
-              <div className="source-preview">{source.content_preview}</div>
+            {preview && (
+              <div className="source-preview">
+                {preview}
+              </div>
             )}
           </div>
         )
@@ -726,20 +847,70 @@ function SourceList({ sources }: SourceListProps) {
     </div>
   )
 }
-
 type DebugBlockProps = {
   title: string
   children: ReactNode
 }
 
-/**
- * admin 调试信息块。
- */
 function DebugBlock({ title, children }: DebugBlockProps) {
   return (
     <div className="debug-block">
       <div className="debug-block-title">{title}</div>
       {children}
+    </div>
+  )
+}
+
+
+type RerankDebugProps = {
+  sources: SourceItem[]
+}
+
+
+function RerankDebug({ sources }: RerankDebugProps) {
+  return (
+    <div className="rerank-debug">
+
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>文档</th>
+            <th>章节</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {sources.map((source, index) => (
+            <tr key={`${source.chunk_id}-${index}`}>
+
+              <td>
+                {index + 1}
+              </td>
+
+              <td>
+                {source.source}
+              </td>
+
+              <td>
+                {source.header_2 || '-'}
+              </td>
+
+              <td>
+                {
+                  source.rerank_score !== undefined
+                    ? source.rerank_score.toFixed(4)
+                    : '-'
+                }
+              </td>
+
+            </tr>
+          ))}
+        </tbody>
+
+      </table>
+
     </div>
   )
 }

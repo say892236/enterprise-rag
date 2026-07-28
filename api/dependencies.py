@@ -23,9 +23,9 @@ def get_rag_chain() -> EnterpriseRAGChain:
     获取全局唯一 RAG Chain 实例。
 
     第一次调用时：
-    - 加载 Chroma Retriever
+    - 加载 Milvus Retriever
     - 加载 BM25 Retriever
-    - 加载 Query Rewriter
+    - 加载 Hybrid Rewriter
     - 加载 BGE Reranker
     - 初始化 LLM
 

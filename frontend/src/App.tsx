@@ -8,12 +8,12 @@ import './App.css'
 /**
  * 应用入口组件。
  *
- * 根据 localStorage 中是否存在 access_token，
+ * 根据 localStorage 中是否存在 token，
  * 判断当前展示登录页还是问答页。
  */
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(
-    Boolean(localStorage.getItem('access_token')),
+    Boolean(localStorage.getItem('token')),
   )
 
   function handleLoginSuccess() {
@@ -21,8 +21,10 @@ function App() {
   }
 
   function handleLogout() {
+    localStorage.removeItem('token')
     localStorage.removeItem('access_token')
     localStorage.removeItem('username')
+    localStorage.removeItem('role')
     localStorage.removeItem('user_role')
     setIsLoggedIn(false)
   }

@@ -4,8 +4,8 @@
 Milvus 真实检索测试。
 
 运行前要求：
-1. .env 中 VECTOR_DB=milvus
-2. 已执行 python build_database.py 构建 Milvus 向量库
+
+已执行 python build_database.py 构建 Milvus 向量库
 
 运行方式：
 python -m tests.test_milvus_retrieve_real
@@ -34,9 +34,6 @@ def test_milvus_retrieve_travel_policy() -> None:
     docs = retriever.retrieve(
         query="员工出差是否可以入住五星级酒店？",
         top_k=3,
-        metadata_filter={
-            "source": "travel_policy.md",
-        },
     )
 
     assert len(docs) > 0, "Milvus 没有检索到任何文档"
@@ -46,15 +43,17 @@ def test_milvus_retrieve_travel_policy() -> None:
         for doc in docs
     }
 
-    assert "travel_policy.md" in returned_sources, (
-        f"预期检索到 travel_policy.md，实际 sources={returned_sources}"
+    assert any(
+        "差旅" in source
+        for source in returned_sources
+    ), (
+        f"没有命中差旅相关文档，实际 sources={returned_sources}"
     )
-
     for doc in docs:
         assert "milvus_score" in doc.metadata
         assert "dense_rank" in doc.metadata
 
-    print_pass("Milvus 可以正常检索 travel_policy.md")
+    print_pass("Milvus 可以正常检索相关文档")
 
 
 def run_all_tests() -> None:

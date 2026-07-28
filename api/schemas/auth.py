@@ -19,7 +19,7 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "username": "ay",
+                "username": "say",
                 "password": "123456",
             }
         }
@@ -27,7 +27,7 @@ class LoginRequest(BaseModel):
 
     username: str = Field(
         description="用户名",
-        examples=["ay"],
+        examples=["say"],
     )
 
     password: str = Field(

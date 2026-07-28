@@ -27,7 +27,6 @@ NOISY_LOGGERS = [
     "huggingface_hub",
     "transformers",
     "sentence_transformers",
-    "chromadb",
     "urllib3",
     "filelock",
 ]

@@ -22,7 +22,6 @@ TEST_MODULES: List[str] = [
     "tests.test_auth",
     "tests.test_access_control",
     "tests.test_confidence_guard",
-    "tests.test_vector_db_config",
     "tests.test_milvus_store",
     "tests.test_milvus_retriever",
     "tests.smoke_test",

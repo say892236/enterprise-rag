@@ -20,7 +20,6 @@ services:
 
     environment:
       # Docker Compose 环境下，FastAPI 容器连接 Milvus Server
-      VECTOR_DB: milvus
       MILVUS_CONNECTION_URI: http://milvus:19530
 
       # 使用容器内挂载的 HuggingFace 缓存

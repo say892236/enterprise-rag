@@ -19,6 +19,7 @@
 from passlib.context import CryptContext
 
 
+
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
@@ -47,51 +48,109 @@ def verify_password(
     )
 
 
-# 为了避免重复调用 hash_password，多生成一次公共 hash 即可
-DEFAULT_PASSWORD_HASH = hash_password("123456")
+# 本地演示账号统一使用相同密码，方便测试不同角色权限
+# 生产环境必须改为数据库存储，并为每个用户设置独立密码
+DEFAULT_TEST_PASSWORD = "123456"
+DEFAULT_PASSWORD_HASH = hash_password(DEFAULT_TEST_PASSWORD)
 
 
-fake_users_db = {
+"""
+测试用户数据。
+
+注意：
+1. 当前用户仅用于项目演示和本地权限测试。
+2. role 必须与 access_control.py 中配置的角色名称完全一致。
+3. 实际生产环境应改用数据库保存用户和密码哈希。
+"""
+
+
+
+# 测试用户数据库
+#
+# key 使用用户名，方便登录时快速查询。
+# 密码不保存明文，而是在程序启动时生成哈希。
+# 当前 USERS_DB 仅用于本地开发、接口演示和多角色权限测试。
+# 生产环境应替换为 MySQL/PostgreSQL 等持久化用户系统。
+USERS_DB = {
+    # 普通员工：只能访问公共制度文档
     "say": {
+        "user_id": 10001,
         "username": "say",
         "hashed_password": DEFAULT_PASSWORD_HASH,
-        "user_id": 10001,
         "role": "employee",
+        "disabled": False,
     },
 
-    "hr_user": {
-        "username": "hr_user",
+    # 人力资源部门
+    "hr01": {
+        "user_id": 10002,
+        "username": "hr01",
         "hashed_password": DEFAULT_PASSWORD_HASH,
-        "user_id": 20001,
         "role": "hr",
+        "disabled": False,
     },
 
-    "finance_user": {
-        "username": "finance_user",
+    # 财务部门
+    "finance01": {
+        "user_id": 10003,
+        "username": "finance01",
         "hashed_password": DEFAULT_PASSWORD_HASH,
-        "user_id": 30001,
         "role": "finance",
+        "disabled": False,
     },
 
-    "it_user": {
-        "username": "it_user",
+    # 研发部门
+    "engineer01": {
+        "user_id": 10004,
+        "username": "engineer01",
         "hashed_password": DEFAULT_PASSWORD_HASH,
-        "user_id": 40001,
-        "role": "it",
+        "role": "engineering",
+        "disabled": False,
     },
 
+    # 行政部门
+    #
+    # administration 是行政部门角色，
+    # 不要写成 admin。
+    "administration01": {
+        "user_id": 10005,
+        "username": "administration01",
+        "hashed_password": DEFAULT_PASSWORD_HASH,
+        "role": "administration",
+        "disabled": False,
+    },
+
+    # 法务部门
+    "legal01": {
+        "user_id": 10006,
+        "username": "legal01",
+        "hashed_password": DEFAULT_PASSWORD_HASH,
+        "role": "legal",
+        "disabled": False,
+    },
+
+    # 管理层
+    "manager01": {
+        "user_id": 10007,
+        "username": "manager01",
+        "hashed_password": DEFAULT_PASSWORD_HASH,
+        "role": "management",
+        "disabled": False,
+    },
+
+    # 系统管理员：可以访问全部文档和调试信息
     "admin": {
+        "user_id": 10008,
         "username": "admin",
         "hashed_password": DEFAULT_PASSWORD_HASH,
-        "user_id": 1,
         "role": "admin",
+        "disabled": False,
     },
 }
-
 
 def get_user(username: str):
     """
     根据用户名查询用户。
     """
 
-    return fake_users_db.get(username)
+    return USERS_DB.get(username)

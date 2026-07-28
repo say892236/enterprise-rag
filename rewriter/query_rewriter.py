@@ -37,62 +37,127 @@ class QueryRewriter:
                 (
                     "system",
                     """
-        你是企业知识库 RAG 系统中的查询改写器。
-
-        你的任务不是回答问题，而是把用户问题改写成更适合检索企业制度文档的问题。
-
-        规则：
-        1. 只输出改写后的问题，不要输出解释。
-        2. 不要回答用户问题。
-        3. 不要编造制度、金额、日期、审批人或公司信息。
-        4. 如果用户问题已经清楚，可以保持原问题。
-        5. 如果用户问题过于口语化，需要改写得更正式、更完整。
-        6. 如果用户问题缺少上下文，但仍能判断大致领域，可以补全为常见企业制度问法。
-        7. 如果用户问题完全无法判断含义，则保持原问题，不要强行补全。
-        8. 改写后的问题应适合用于向量检索和关键词检索。
-        9. 如果用户问题包含明确的制度编号、文档编号、条款编号，例如 FIN-TR-2026-01、FAQ-003、3.2、5.1，应尽量保留编号原样。
-        10. 不要改变用户问题的查询意图。例如用户问“是什么制度”，不要改写成“具体内容是什么”；用户问“编号是什么”，不要改写成“制度内容是什么”。
-        11. 对编号类查询，优先保持原问题或只做轻微补全。
-
-        示例：
-
-        用户问题：住宿能报多少？
-        改写：员工出差住宿报销标准是多少？
-
-        用户问题：报销多久内提交？
-        改写：员工报销申请需要在多久内提交？
-
-        用户问题：高铁太久了能不能坐飞机？
-        改写：员工出差时高铁时间超过多久可以选择飞机？
-
-        用户问题：FIN-TR-2026-01 是什么制度？
-        改写：FIN-TR-2026-01 是什么制度？
-
-        用户问题：FAQ-003 是什么？
-        改写：FAQ-003 是什么？
-
-        用户问题：这个能报吗？
-        改写：这个能报吗？
-        """,
+                    你是企业知识库 RAG 系统中的查询改写器。
+            
+                    你的任务：
+                    根据【历史对话】和【当前问题】，
+                    生成适合知识库检索的问题。
+            
+                    规则：
+            
+                    1. 只输出改写后的问题。
+                    2. 不回答问题。
+                    3. 不编造信息。
+                    4. 如果当前问题依赖历史上下文，需要补全缺失信息。
+                    5. 保留制度编号、金额、日期等关键实体。
+                    6. 如果当前问题已经完整，不要修改。
+            
+            
+                    示例：
+            
+                    历史：
+                    用户：上海出差住宿标准是多少？
+                    助手：上海属于一类城市，普通员工600元。
+            
+                    当前：
+                    普通员工呢？
+            
+                    输出：
+                    上海出差住宿标准中普通员工住宿标准是多少？
+            
+                    """
                 ),
                 (
                     "human",
-                    "用户问题：{question}\n改写后的检索问题：",
-                ),
+                    """
+                    历史对话：
+                    {chat_history}
+            
+                    当前问题：
+                    {question}
+            
+                    改写后的检索问题：
+                    """
+                )
             ]
         )
 
         self.chain = self.prompt | self.llm | StrOutputParser()
 
-    def rewrite(self, question: str) -> str:
+    def rewrite(self, question: str,chat_history=None,) -> str:
         """
-        改写用户问题。
-        """
+           改写用户问题。
+
+           参数：
+           question:
+               当前用户问题
+
+           chat_history:
+               Redis 中保存的历史对话
+
+           作用：
+           将多轮对话中的省略问题，
+           转换成独立完整的问题。
+           """
+
+        history_text = self.format_chat_history(chat_history)
 
         rewritten_question = self.chain.invoke(
             {
                 "question": question,
+                "chat_history": chat_history or []
             }
         )
 
+
         return rewritten_question.strip()
+
+    def format_chat_history(self, chat_history):
+        """
+        将历史消息转换为 Query Rewrite 可理解的文本。
+
+        输入:
+
+        [
+            {
+                "role": "user",
+                "content": "上海住宿标准是多少?"
+            },
+            {
+                "role": "assistant",
+                "content": "普通员工600元/晚"
+            }
+        ]
+
+
+        输出:
+
+        用户:
+        上海住宿标准是多少?
+
+        AI:
+        普通员工600元/晚
+        """
+
+        if not chat_history:
+            return "暂无历史对话"
+
+        messages = []
+
+        for item in chat_history:
+
+            role = item.get("role")
+
+            content = item.get("content")
+
+            if role == "user":
+                messages.append(
+                    f"用户：{content}"
+                )
+
+            elif role == "assistant":
+                messages.append(
+                    f"AI：{content}"
+                )
+
+        return "\n".join(messages)

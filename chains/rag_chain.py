@@ -12,7 +12,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 
 from reranker.bge_reranker import BGEReranker
-from retriever.chroma_retriever import ChromaRetriever
+from retriever.milvus_retriever import MilvusRetriever
 from rewriter.query_rewriter import QueryRewriter
 from retriever.query_router import QueryRouter
 from compressor.context_compressor import ContextCompressor
@@ -31,7 +31,7 @@ class EnterpriseRAGChain:
     企业级 RAG 基础链路。
 
     当前版本：
-    - ChromaRetriever 检索
+    - MilvusRetriever 检索
     - 拼接 context
     - Prompt 约束回答
     - LLM 生成答案
@@ -46,7 +46,7 @@ class EnterpriseRAGChain:
 
     def __init__(
         self,
-        retriever: ChromaRetriever,
+        retriever: MilvusRetriever,
         reranker: Optional[BGEReranker] = None,
         rewriter: Optional[QueryRewriter]= None,
         llm_model: str = "deepseek-v4-flash",
@@ -96,20 +96,74 @@ class EnterpriseRAGChain:
 9. 涉及金额、天数、审批规则时，必须严格引用上下文中的原始规定。
 10. 回答要简洁，优先回答用户直接问题，不要过度展开。
 11. 回答末尾不要编造来源，来源由系统单独提供。
+12. 制度中的数字、金额、日期、比例必须保持原文表达，不得自行增加“大于、小于、约等于、上限、下限”等未出现的含义。
 
 回答格式要求：
-- 如果有明确答案：直接回答，并列出关键规则。
-- 如果没有直接答案，但有相关制度：先回答“知识库未直接说明该问题”，再列出可参考规则。
-- 如果完全没有相关信息：只回答"根据现有知识库内容，未能查询到相关信息。请调整提问方式，或咨询相关行政/HR 人员。"
-- 如果有标准表或条件规则：先列出标准或规则，再说明还需要哪些条件才能确定唯一答案。
-- 如果只有相关制度但不能直接推出结论：先回答“知识库未直接说明该问题”，再列出可参考规则。
+
+1. 涉及以下类型信息时，必须使用 Markdown 表格：
+   - 金额标准
+   - 报销额度
+   - 住宿标准
+   - 等级划分
+   - 城市分类
+   - 天数限制
+   - 审批权限
+
+2. 表格数据禁止转换成项目符号列表。
+
+3. 如果知识库上下文中存在表格结构：
+   - 尽量保持原始表格结构。
+   - 不要重新组织成文字描述。
+
+4. 普通规则说明可以使用列表。
+
+5. 回答顺序：
+   第一部分：直接答案
+   第二部分：标准表格（如果存在）
+   第三部分：补充规则或注意事项
+
+6. 不要为了简洁删除表格中的字段。
+
+示例：
+
+知识库：
+|城市类别|普通员工|经理级|
+|-|-|-|
+|一类城市|600元/晚|750元/晚|
+
+正确回答：
+
+|城市类别|普通员工|经理级|
+|-|-|-|
+|一类城市|600元/晚|750元/晚|
+
+错误回答：
+
+- 一类城市普通员工600元
+- 一类城市经理750元
+
+
+"""
+                ),
+                ("human",     """
+【历史对话】
+{chat_history}
+
+
+【用户原始问题】
+{original_question}
+
+
+【改写后的检索问题】
+{rewritten_question}
 
 
 【知识库上下文】
 {context}
-""",
-                ),
-                ("human", "{question}"),
+
+
+请结合历史对话和知识库上下文回答用户原始问题。
+"""),
             ]
         )
 
@@ -143,6 +197,53 @@ score: {score}
             context_parts.append(context)
 
         return "\n".join(context_parts)
+
+    def format_chat_history(self, chat_history):
+        """
+        将 Redis 中保存的历史消息转换成 Prompt 可读文本。
+
+        输入:
+        [
+            {
+                "role":"user",
+                "content":"上海住宿标准是多少"
+            },
+            {
+                "role":"assistant",
+                "content":"普通员工600元"
+            }
+        ]
+
+        输出:
+        用户:
+        上海住宿标准是多少
+
+        AI:
+        普通员工600元
+        """
+
+        if not chat_history:
+            return "暂无历史对话"
+
+        history_text = []
+
+        for message in chat_history:
+
+            role = message.get("role")
+
+            content = message.get("content")
+
+            if role == "user":
+                history_text.append(
+                    f"用户: {content}"
+                )
+
+            elif role == "assistant":
+                history_text.append(
+                    f"AI: {content}"
+                )
+
+        return "\n".join(history_text)
 
     def format_sources(self, documents: List[Document]) -> List[Dict[str, Any]]:
         """
@@ -179,7 +280,6 @@ score: {score}
 
                 # Dense 检索分数
                 "score": metadata.get("score"),
-                "chroma_score": metadata.get("chroma_score"),
                 "milvus_score": metadata.get("milvus_score"),
                 "dense_rank": metadata.get("dense_rank"),
                 "dense_rrf_score": metadata.get("dense_rrf_score"),
@@ -208,9 +308,11 @@ score: {score}
             retrieve_top_k: int = 10,
             rerank_top_k: int = 5,
             metadata_filter: dict | None = None,
+            chat_history=None,
             enable_rewrite: bool = True,
             enable_rerank: bool = True,
             enable_compression: bool = True,
+            callbacks: Optional[List[Any]] = None,
     ) -> dict:
         """
         执行一次企业级 RAG 问答。
@@ -281,7 +383,23 @@ score: {score}
         rewrite_start_time = time.perf_counter()
 
         if final_enable_rewrite and self.rewriter is not None:
-            rewritten_question = self.rewriter.rewrite(original_question)
+
+            rewritten_question = self.rewriter.rewrite(
+                question=original_question,
+                chat_history=chat_history,
+            )
+            # if RAG_DEBUG:
+            logger.info(
+                "Chat History=%s",
+                chat_history
+            )
+
+            logger.info(
+                "Rewrite | 原问题=%s | 改写=%s",
+                original_question,
+                rewritten_question
+            )
+
         else:
             rewritten_question = original_question
 
@@ -436,7 +554,9 @@ score: {score}
             chunk_id = metadata.get("chunk_id", "")
 
             context_parts.append(
-                f"【文档 {index}】\n"
+                # 不向模型暴露“文档 1、文档 2”等临时编号，
+                # 避免模型在最终答案中生成无意义的引用标记。
+                "【知识库上下文片段】\n"
                 f"来源：{source}\n"
                 f"一级标题：{header_1}\n"
                 f"二级标题：{header_2}\n"
@@ -479,6 +599,10 @@ score: {score}
                     9. 涉及金额、时间、天数和审批流程时，必须严格依据上下文。
                     10. 回答应简洁、清楚，优先直接回答用户问题。
                     11. 当问题涉及城市、职级、金额上限、天数或审批条件时，如果上下文中提供了判断依据，回答时应同时说明依据和结论。例如：城市属于哪一类、员工属于哪个职级、适用哪条标准。
+                    12. 最终答案中禁止出现“文档1”“文档2”“片段1”等内部检索编号。
+                    13. 禁止使用“（文档1）”“[文档2]”等引用标记。
+                    14. 不要在答案正文中列出文件名或引用来源，引用来源由系统在答案下方单独展示。
+                    15. 只有当用户明确询问信息来自哪项制度时，才可以直接说明制度名称。
                     """
                 ),
                 (
@@ -500,18 +624,47 @@ score: {score}
         )
 
         # 8. 调用 LLM。
+        #
+        # 普通 /chat：
+        # 使用 invoke()，等待完整回答后一次性返回。
+        #
+        # 流式 /chat/stream：
+        # 使用 stream()，让模型真实地产生增量文本，
+        # 同时通过 callbacks 把 token 发送给 SSE 服务。
         chain = prompt | self.llm | StrOutputParser()
 
         llm_start_time = time.perf_counter()
 
-        answer = chain.invoke(
-            {
-                "original_question": original_question,
-                "rewritten_question": rewritten_question,
-                "context": context,
-            }
+        chain_input = {
+            "original_question": original_question,
+            "rewritten_question": rewritten_question,
+            "context": context,
+            "chat_history": self.format_chat_history(chat_history),
+        }
 
-        )
+        if callbacks:
+            # 保存所有流式片段。
+            # SSE 回调负责实时发送 token，
+            # 这里负责重新拼出完整答案，供 Redis 和最终响应使用。
+            answer_parts = []
+
+            for chunk in chain.stream(
+                    chain_input,
+                    config={
+                        "callbacks": callbacks,
+                    },
+            ):
+                if not chunk:
+                    continue
+
+                answer_parts.append(chunk)
+
+            answer = "".join(answer_parts)
+
+        else:
+            # 普通非流式接口保持原来的调用方式
+            answer = chain.invoke(chain_input)
+
         timings["llm_seconds"] = round(
             time.perf_counter() - llm_start_time,
             3,

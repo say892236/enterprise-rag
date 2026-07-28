@@ -13,7 +13,7 @@ __pycache__/
 .venv/
 venv/
 
-# Milvus / Chroma 本地数据
+# Milvus 本地数据
 *.db
 *.sqlite
 *.sqlite3
@@ -40,7 +40,7 @@ Thumbs.db
 # Project Data
 # =========================
 
-# Chroma 向量库持久化数据
+#向量库持久化数据
 data/vectorstore/
 
 # 评估输出结果
@@ -72,3 +72,7 @@ logs/
 
 # Docker runtime data
 volumes/
+
+
+node_modules/
+dist/

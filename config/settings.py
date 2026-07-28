@@ -19,22 +19,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# Chroma 持久化目录
-CHROMA_PERSIST_DIR = "data/vectorstore/chroma"
-
-# Chroma collection 名称
-CHROMA_COLLECTION_NAME = "enterprise_rag"
-
-# 当前使用的向量数据库。
-# 可选值：
-# - chroma
-# - milvus
-VECTOR_DB = os.getenv(
-    "VECTOR_DB",
-    "chroma",
-).lower()
-
-
 # ==========================
 # Milvus 配置
 # ==========================

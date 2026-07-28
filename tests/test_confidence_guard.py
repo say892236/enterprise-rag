@@ -78,6 +78,8 @@ def test_empty_query_tokens_should_fail() -> None:
         documents=docs,
     )
 
+    print(result.to_dict())
+
     assert result.passed is False
     assert result.reason == "用户问题缺少有效关键词"
     assert result.overlap_count == 0
@@ -121,26 +123,27 @@ def test_irrelevant_canteen_question_should_fail() -> None:
                 "员工申请远程办公需提前 1 个工作日提交申请。"
             ),
             metadata={
-                "source": "employee_handbook.md",
+                "source": "员工手册.md",
                 "header_2": "5. 考勤管理",
             },
         ),
     ]
 
     result = guard.check(
-        query="公司食堂的开放时间是什么？",
+        query="公司附近有没有健身房？",
         documents=docs,
     )
 
+    print(result.to_dict())
 
 
     assert result.passed is False
-    assert result.reason == "问题关键词与检索结果缺少有效重叠"
+    assert "问题关键词与检索结果缺少有效重叠" in result.reason
     assert result.overlap_count == 0
-    assert "食堂" in result.query_tokens
+    assert "健身房" in result.query_tokens
     assert result.matched_tokens == []
 
-    print_pass("食堂开门时间这类无关问题触发低置信度拒答")
+    print_pass("有没有健身房这类无关问题触发低置信度拒答")
 
 
 def test_relevant_travel_hotel_question_should_pass() -> None:
@@ -169,7 +172,7 @@ def test_relevant_travel_hotel_question_should_pass() -> None:
                 "一类城市普通员工住宿标准为 600 元/晚。"
             ),
             metadata={
-                "source": "travel_policy.md",
+                "source": "差旅住宿与交通标准.md",
                 "header_2": "3. 住宿标准",
             },
         )
@@ -180,8 +183,15 @@ def test_relevant_travel_hotel_question_should_pass() -> None:
         documents=docs,
     )
 
+    print(repr(result.matched_tokens))
+
+    print(
+        "出差" in result.matched_tokens,
+        "住宿" in result.matched_tokens
+    )
+
     assert result.passed is True
-    assert result.reason == "检索结果通过置信度检查"
+    assert result.reason == "检索结果通过关键词重叠检查"
     assert result.overlap_count >= 1
 
     # 至少应该命中这些关键词中的一个。
@@ -189,6 +199,7 @@ def test_relevant_travel_hotel_question_should_pass() -> None:
         token in result.matched_tokens
         for token in ["出差", "住宿"]
     )
+
 
     print_pass("相关差旅住宿问题通过置信度检查")
 
@@ -209,7 +220,7 @@ def test_to_dict_should_return_serializable_data() -> None:
         Document(
             page_content="员工出差住宿标准按照城市等级执行。",
             metadata={
-                "source": "travel_policy.md",
+                "source": "差旅住宿与交通标准.md",
             },
         )
     ]

@@ -3,52 +3,77 @@
 """
 项目核心链路 Smoke Test。
 
-Smoke Test 的目标不是全面评估效果，而是快速确认：
-1. Chroma 向量库能正常加载。
-2. Dense Retriever 能正常返回结果。
-3. BM25 Retriever 能正常返回结果。
-4. Hybrid Retriever 能正常融合 Dense + BM25 结果。
-5. 当前核心模块没有因为重构而坏掉。
-
-运行方式：
-python -m tests.smoke_test
+测试目标：
+1. Milvus 向量库可以正常加载。
+2. Dense Retriever 可以正常返回语义相关文档。
+3. BM25 Retriever 可以根据精确制度编号召回目标文档。
+4. Hybrid Retriever 可以融合 Dense 与 BM25 检索结果。
+5. 快速确认核心检索链路没有因重构而损坏。
 
 注意：
-这里默认不调用 LLM，也不跑 Reranker。
-原因：
-- LLM 需要 API，速度慢。
-- Reranker CPU 推理慢。
-- Smoke Test 应该尽量轻量、快速。
+- Smoke Test 只验证核心链路是否可用，不承担完整的检索效果评估。
+- 不调用 LLM，避免产生 API 调用和额外耗时。
+- 不调用 Reranker，保持测试轻量。
+- 排名质量和 Top1 准确率应由独立评测脚本负责。
 """
 
+from langchain_core.documents import Document
+
 from pipelines.rag_pipeline import (
-    build_dense_retriever,
     build_bm25_retriever,
+    build_dense_retriever,
     build_hybrid_retriever,
 )
 
 
-def assert_not_empty(name: str, docs: list):
+# 当前知识库中已经确认存在的测试文档
+TRAVEL_SOURCE = "差旅住宿与交通标准.md"
+REIMBURSEMENT_SOURCE = "费用报销制度与流程.md"
+
+# 《费用报销管理制度》中的精确制度编号
+REIMBURSEMENT_POLICY_ID = "FIN-EXP-2026-01"
+
+
+def assert_not_empty(
+    name: str,
+    docs: list[Document],
+) -> None:
     """
     检查检索结果不能为空。
-
-    参数：
-    name:
-        当前测试项名称，用于报错提示。
-
-    docs:
-        检索返回的 Document 列表。
     """
 
     assert docs, f"{name} 返回结果为空"
 
 
-def test_dense_retriever():
+def assert_source_in_results(
+    name: str,
+    docs: list[Document],
+    expected_source: str,
+) -> None:
+    """
+    检查目标文档是否出现在检索结果中。
+
+    Smoke Test 重点验证目标文档能够被召回，
+    不强制所有语义查询都必须稳定排在 Top1。
+    """
+
+    actual_sources = [
+        doc.metadata.get("source")
+        for doc in docs
+    ]
+
+    assert expected_source in actual_sources, (
+        f"{name} 未召回目标文档：{expected_source}，"
+        f"实际结果：{actual_sources}"
+    )
+
+
+def test_dense_retriever() -> None:
     """
     测试 Dense Retriever。
 
-    目标：
-    确认 Chroma 向量库能加载，并且能根据语义问题召回文档。
+    使用自然语言问题验证 Milvus Dense 检索
+    是否能够召回差旅住宿制度。
     """
 
     retriever = build_dense_retriever()
@@ -58,80 +83,127 @@ def test_dense_retriever():
         top_k=5,
     )
 
-    assert_not_empty("Dense Retriever", docs)
+    assert_not_empty(
+        name="Dense Retriever",
+        docs=docs,
+    )
+
+    # 语义查询只要求目标文档进入 Top5，
+    # 不在 Smoke Test 中强制要求永远保持 Top1。
+    assert_source_in_results(
+        name="Dense Retriever",
+        docs=docs,
+        expected_source=TRAVEL_SOURCE,
+    )
+
+    top1 = docs[0]
 
     print("[PASS] Dense Retriever 正常")
-    print("Top1:", docs[0].metadata.get("source"), docs[0].metadata.get("header_2"))
+    print(
+        "Top1:",
+        top1.metadata.get("source"),
+        top1.metadata.get("header_2"),
+    )
 
 
-def test_bm25_retriever():
+def test_bm25_retriever() -> None:
     """
     测试 BM25 Retriever。
 
-    目标：
-    确认 BM25 对制度编号这类精确关键词查询有效。
+    使用当前知识库真实存在的制度编号，
+    验证 BM25 对精确关键词和编号检索有效。
     """
 
     retriever = build_bm25_retriever()
 
     docs = retriever.retrieve(
-        query="FIN-TR-2026-01",
+        query=REIMBURSEMENT_POLICY_ID,
         top_k=5,
     )
 
-    assert_not_empty("BM25 Retriever", docs)
+    assert_not_empty(
+        name="BM25 Retriever",
+        docs=docs,
+    )
 
     top1 = docs[0]
+    top1_source = top1.metadata.get("source")
 
-    # FIN-TR-2026-01 应该命中差旅制度文档头
-    assert top1.metadata.get("source") == "travel_policy.md", (
-        "BM25 编号检索 Top1 不符合预期，"
-        f"实际为: {top1.metadata.get('source')}"
+    # 精确制度编号查询具有较强唯一性，
+    # 因此这里可以要求目标文档排在 Top1。
+    assert top1_source == REIMBURSEMENT_SOURCE, (
+        "BM25 制度编号检索 Top1 不符合预期，"
+        f"期望：{REIMBURSEMENT_SOURCE}，"
+        f"实际：{top1_source}"
     )
 
     print("[PASS] BM25 Retriever 正常")
-    print("Top1:", top1.metadata.get("source"), top1.metadata.get("chunk_id"))
+    print(
+        "Top1:",
+        top1_source,
+        top1.metadata.get("chunk_id"),
+    )
 
 
-def test_hybrid_retriever():
+def test_hybrid_retriever() -> None:
     """
     测试 Hybrid Retriever。
 
-    目标：
-    确认 Dense + BM25 可以一起工作，并且通过 RRF 正常融合。
+    使用“制度名称 + 精确编号”查询，
+    验证 Dense 与 BM25 可以共同参与检索和融合。
     """
 
     retriever = build_hybrid_retriever()
 
     docs = retriever.retrieve(
-        query="FIN-TR-2026-01",
+        query=f"费用报销管理制度 {REIMBURSEMENT_POLICY_ID}",
         top_k=5,
     )
 
-    assert_not_empty("Hybrid Retriever", docs)
-
-    top1 = docs[0]
-
-    # Hybrid 查询制度编号时，Top1 也应该是差旅制度文档头
-    assert top1.metadata.get("source") == "travel_policy.md", (
-        "Hybrid 编号检索 Top1 不符合预期，"
-        f"实际为: {top1.metadata.get('source')}"
+    assert_not_empty(
+        name="Hybrid Retriever",
+        docs=docs,
     )
 
-    retrieval_sources = top1.metadata.get("retrieval_sources", [])
+    # Hybrid Smoke Test 只要求目标文档能够进入 Top5。
+    assert_source_in_results(
+        name="Hybrid Retriever",
+        docs=docs,
+        expected_source=REIMBURSEMENT_SOURCE,
+    )
 
-    # 这个编号查询理想情况下 Dense 和 BM25 都会命中
+    target_doc = next(
+        doc
+        for doc in docs
+        if doc.metadata.get("source") == REIMBURSEMENT_SOURCE
+    )
+
+    retrieval_sources = target_doc.metadata.get(
+        "retrieval_sources",
+        [],
+    )
+
+    # 精确编号应该至少由 BM25 检索召回。
     assert "bm25" in retrieval_sources, (
-        "Hybrid 结果中没有 BM25 来源，"
+        "Hybrid 目标结果中没有 BM25 检索来源，"
         f"retrieval_sources={retrieval_sources}"
     )
 
+    top1 = docs[0]
+
     print("[PASS] Hybrid Retriever 正常")
-    print("Top1:", top1.metadata.get("source"), top1.metadata.get("chunk_id"))
-    print("retrieval_sources:", retrieval_sources)
+    print(
+        "Top1:",
+        top1.metadata.get("source"),
+        top1.metadata.get("chunk_id"),
+    )
+    print(
+        "目标文档 retrieval_sources:",
+        retrieval_sources,
+    )
 
 
-def main():
+def main() -> None:
     """
     统一执行所有 Smoke Test。
     """

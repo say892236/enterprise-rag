@@ -25,7 +25,7 @@ from typing import List, Dict, Any, Optional
 
 from langchain_core.documents import Document
 
-from retriever.chroma_retriever import ChromaRetriever
+
 from retriever.bm25_retriever import BM25Retriever
 from retriever.milvus_retriever import MilvusRetriever
 
@@ -199,6 +199,7 @@ class HybridRetriever:
                 metadata["dense_rank"] = None
                 metadata["bm25_rank"] = None
                 metadata["dense_rrf_score"] = 0.0
+                metadata["milvus_score"] = 0.0
                 metadata["bm25_rrf_score"] = 0.0
                 metadata["retrieval_sources"] = []
 
@@ -222,8 +223,8 @@ class HybridRetriever:
                 pooled_doc.metadata["dense_rank"] = rank
                 pooled_doc.metadata["dense_rrf_score"] = score
 
-                # Chroma 原始分数越低越相关
-                pooled_doc.metadata["chroma_score"] = doc.metadata.get("score")
+
+                pooled_doc.metadata["milvus_score"] = doc.metadata.get("score")
 
             # 记录 BM25 检索信息
             if source_type == "bm25":
@@ -243,7 +244,7 @@ class HybridRetriever:
         执行 Hybrid 检索。
 
         流程：
-        1. 用 Chroma 做 dense semantic search。
+        1. 用 Milvus 做 dense semantic search。
         2. 用 BM25 做 sparse keyword search。
         3. 用 RRF 融合两路结果。
         4. 按 hybrid_score 从高到低排序。

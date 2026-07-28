@@ -47,14 +47,14 @@ def test_get_existing_user():
     测试可以从 Mock 用户表中读取已存在用户。
     """
 
-    user = get_user("ay")
+    user = get_user("say")
 
     assert user is not None
-    assert user["username"] == "ay"
+    assert user["username"] == "say"
     assert user["user_id"] == 10001
     assert user["role"] == "employee"
 
-    print("[PASS] 可以读取已存在用户 ay")
+    print("[PASS] 可以读取已存在用户 say")
 
 
 def test_get_unknown_user():
@@ -74,7 +74,7 @@ def test_verify_password_success():
     测试正确密码可以校验通过。
     """
 
-    user = get_user("ay")
+    user = get_user("say")
 
     assert user is not None
     assert verify_password("123456", user["hashed_password"]) is True
@@ -87,7 +87,7 @@ def test_verify_password_failed():
     测试错误密码校验失败。
     """
 
-    user = get_user("ay")
+    user = get_user("say")
 
     assert user is not None
     assert verify_password("wrong_password", user["hashed_password"]) is False
@@ -101,7 +101,7 @@ def test_create_and_decode_token():
     """
 
     token_data = {
-        "sub": "ay",
+        "sub": "say",
         "user_id": 10001,
         "role": "employee",
     }
@@ -110,7 +110,7 @@ def test_create_and_decode_token():
     payload = decode_access_token(token)
 
     assert payload is not None
-    assert payload["sub"] == "ay"
+    assert payload["sub"] == "say"
     assert payload["user_id"] == 10001
     assert payload["role"] == "employee"
     assert "exp" in payload
@@ -154,7 +154,7 @@ def test_expired_token():
 
     token = create_access_token(
         data={
-            "sub": "ay",
+            "sub": "say",
             "user_id": 10001,
             "role": "employee",
         },

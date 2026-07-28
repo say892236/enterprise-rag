@@ -1,0 +1,77 @@
+.markdown-body {
+  line-height: 1.8;
+  font-size: 15px;
+}
+
+
+/* 标题 */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 16px 0 10px;
+  font-weight: 600;
+}
+
+
+/* 列表 */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 24px;
+}
+
+
+/* 表格 */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+
+.markdown-body th {
+  background-color: #f3f6fa;
+}
+
+
+/* 引用 */
+.markdown-body blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 12px;
+  color: #666;
+}
+
+
+/* 代码块 */
+.markdown-body pre {
+  background: #f6f8fa;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+
+.rerank-debug table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+
+.rerank-debug th,
+.rerank-debug td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+}
+
+
+.rerank-debug th {
+    font-weight: 600;
+}
